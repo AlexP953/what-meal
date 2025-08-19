@@ -15,11 +15,11 @@ const ALLOWED_FIELDS = new Set([
   "notes",
 ]);
 
-export async function PATCH(req: Request, ctx: { params: { id: string } }) {
+export async function PATCH(req: Request, context: any) {
   const { session, error } = await requireSession();
   if (error) return error;
 
-  const { id } = ctx.params;
+  const { id } = (context as { params: { id: string } }).params;
 
   if (!isValidObjectId(id)) {
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
@@ -80,14 +80,13 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
   );
 }
 
-export async function DELETE(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(req: Request, context: any) {
+  const { id } = (context as { params: { id: string } }).params;
+
   const { session, error } = await requireSession();
   if (error) return error;
 
-  const existing = await Meal.findById(params.id);
+  const existing = await Meal.findById(id);
 
   if (!existing) {
     return NextResponse.json({ error: "Meal not found" }, { status: 404 });
@@ -101,7 +100,7 @@ export async function DELETE(
   try {
     await dbConnect();
 
-    const deleted = await Meal.findByIdAndDelete(params.id).lean();
+    const deleted = await Meal.findByIdAndDelete(id).lean();
 
     if (!deleted) {
       return NextResponse.json(
@@ -117,14 +116,11 @@ export async function DELETE(
   }
 }
 
-export async function GET(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: Request, context: any) {
   const { session, error } = await requireSession();
   if (error) return error;
 
-  const { id } = await ctx.params;
+  const { id } = (context as { params: { id: string } }).params;
 
   try {
     await dbConnect();
