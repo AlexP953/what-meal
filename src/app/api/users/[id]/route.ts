@@ -13,16 +13,15 @@ const updateUserAdminSchema = updateUserSchema.extend({
   role: z.enum(["admin", "user"]).optional(),
 });
 
-export async function PATCH(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(req: Request, context: any) {
   const { session, error } = await requireSession();
+  const { id } = (context as { params: { id: string } }).params;
+
   if (error) return error;
 
   if (!session?.user) return forbid();
 
-  const sameUser = session.user.id === params.id;
+  const sameUser = session.user.id === id;
   const admin = isAdmin(session);
   if (!admin && !sameUser) return forbid();
 
@@ -47,14 +46,14 @@ export async function PATCH(
     if (update.email) {
       const dup = await User.findOne({
         email: update.email,
-        _id: { $ne: params.id },
+        _id: { $ne: id },
       }).lean();
       if (dup)
         return NextResponse.json({ error: "Email ya en uso" }, { status: 409 });
     }
 
     const user = await User.findByIdAndUpdate(
-      params.id,
+      id,
       { $set: update },
       {
         new: true,
@@ -84,10 +83,9 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(req: Request, context: any) {
+  const { id } = (context as { params: { id: string } }).params;
+
   const { session, error } = await requireSession();
   if (error) return error;
 
@@ -96,7 +94,7 @@ export async function DELETE(
   try {
     await dbConnect();
 
-    const deleted = await User.findByIdAndDelete(params.id).lean();
+    const deleted = await User.findByIdAndDelete(id).lean();
 
     if (!deleted) {
       return NextResponse.json(
@@ -112,14 +110,11 @@ export async function DELETE(
   }
 }
 
-export async function GET(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: Request, context: any) {
   const { session, error } = await requireSession();
   if (error) return error;
 
-  const { id } = await ctx.params;
+  const { id } = (context as { params: { id: string } }).params;
 
   const isSelf = session.user?.id === id;
   if (!isAdmin(session) && !isSelf) return forbid();
