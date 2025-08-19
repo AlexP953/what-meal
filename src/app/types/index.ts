@@ -9,7 +9,7 @@ export type UserLean = {
 };
 
 export type MealLean = {
-  _id: Types.ObjectId;
+  _id: string;
   name: string;
   date: string;
   type: "breakfast" | "lunch" | "dinner" | "snack";

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 60">
+  <!-- Plato exterior -->
+  <circle cx="30" cy="30" r="22" fill="white" stroke="#22c55e" stroke-width="3"></circle>
+  
+  <!-- Plato interior (borde más claro para dar profundidad) -->
+  <circle cx="30" cy="30" r="16" fill="none" stroke="#a7f3d0" stroke-width="2"></circle>
+  
+  <!-- Check de positivo -->
+  <path d="M20 30 l6 6 l12 -12" stroke="#22c55e" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
+  
+  <!-- Nombre -->
+  <text x="70" y="35" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#1f2937">
+    What<tspan fill="#22c55e">Meal</tspan>
+  </text>
+</svg>
