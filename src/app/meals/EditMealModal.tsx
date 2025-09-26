@@ -63,7 +63,7 @@ export default function EditMealModal({
     setSubmitting(true);
     try {
       const res = await fetch(`/api/meals/${meal!._id}`, {
-        method: "PUT",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, date, type, reaction, place, notes }),
       });
