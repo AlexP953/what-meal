@@ -114,7 +114,7 @@ export async function GET(req: Request, context: any) {
   const { session, error } = await requireSession();
   if (error) return error;
 
-  const { id } = (context as { params: { id: string } }).params;
+  const { id } = await (context as { params: Promise<{ id: string }> }).params;
 
   const isSelf = session.user?.id === id;
   if (!isAdmin(session) && !isSelf) return forbid();
