@@ -21,7 +21,7 @@ export async function PATCH(req: Request, context: any) {
 
   if (!session?.user) return forbid();
 
-  const sameUser = session.user.id === id;
+  const sameUser = session!.user.id === id;
   const admin = isAdmin(session);
   if (!admin && !sameUser) return forbid();
 

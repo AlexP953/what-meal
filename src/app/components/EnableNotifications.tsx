@@ -18,7 +18,7 @@ export default function EnableNotifications({
 
     async function checkToken() {
       try {
-        const res = await fetch(`/api/users/${session.user.id}`);
+        const res = await fetch(`/api/users/${session!.user!.id}`);
         const data = await res.json();
         const tokens = data?.user?.fcmTokens || data?.user?.fcmToken;
         if (tokens && (Array.isArray(tokens) ? tokens.length > 0 : true)) {
@@ -54,7 +54,7 @@ export default function EnableNotifications({
       });
 
       if (currentToken && session?.user?.id) {
-        const res = await fetch(`/api/users/${session.user.id}/token`, {
+        const res = await fetch(`/api/users/${session!.user!.id}/token`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token: currentToken }),
@@ -86,7 +86,7 @@ export default function EnableNotifications({
       setLoading(true);
       if (!session?.user?.id) return;
 
-      await fetch(`/api/users/${session.user.id}/token`, {
+      await fetch(`/api/users/${session!.user!.id}/token`, {
         method: "DELETE",
       });
 
