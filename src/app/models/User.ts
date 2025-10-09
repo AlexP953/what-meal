@@ -6,6 +6,7 @@ const UserSchema = new Schema(
     passwordHash: { type: String, required: true },
     name: { type: String },
     role: { type: String, enum: ["admin", "user"], default: "user", index: true },
+    fcmToken: { type: String, default: null },
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } } // 👈
 );
@@ -23,6 +24,7 @@ export type UserDoc = {
   passwordHash: string;
   name?: string;
   role: string;
+  fcmToken?: string | null;
 };
 
 export const User = models.User || model("User", UserSchema);

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MealLean } from "../types";
 import { useSession, signOut } from "next-auth/react";
 import AddMealModal from "./AddMealModal";
 import EditMealModal from "./EditMealModal";
-import { FunnelIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { FunnelIcon, XMarkIcon, Bars3Icon } from "@heroicons/react/24/outline";
+import EnableNotifications from "../components/EnableNotifications";
 
 type Reaction = "good" | "neutral" | "bad";
 type MealType = "breakfast" | "lunch" | "dinner" | "snack";
@@ -23,27 +24,45 @@ export default function MealsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Crear
   const [openCreate, setOpenCreate] = useState(false);
 
-  // Editar
   const [openEdit, setOpenEdit] = useState(false);
   const [selectedMeal, setSelectedMeal] = useState<MealLean | null>(null);
 
-  // Filtros
   const [openFilters, setOpenFilters] = useState(false);
-  const [reactions, setReactions] = useState<Reaction[]>([]); 
+  const [reactions, setReactions] = useState<Reaction[]>([]);
   const [type, setType] = useState<MealType | "">("");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+
+    if (menuOpen) {
+      document.addEventListener("click", handleClickOutside);
+    } else {
+      document.removeEventListener("click", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("click", handleClickOutside);
+    };
+  }, [menuOpen]);
 
   function formatDate(date: string): string {
     if (!date) return "";
     const [y, m, d] = date.split("-");
     return `${d}-${m}-${y}`;
   }
-  
+
   useEffect(() => {
     if (status === "loading") return;
     if (status !== "authenticated" || !session?.user?.id) {
@@ -69,14 +88,12 @@ export default function MealsPage() {
     fetchMeals();
   }, [session?.user?.id, status]);
 
-  // Crear
   function handleCreated(newMeal: MealLean | undefined) {
     if (!newMeal || !newMeal._id || !newMeal.reaction) return;
     setMeals((prev) => [newMeal, ...prev.filter(Boolean)]);
     setOpenCreate(false);
   }
 
-  // Editar
   function openEditModal(meal: MealLean) {
     setSelectedMeal(meal);
     setOpenEdit(true);
@@ -139,53 +156,66 @@ export default function MealsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 flex flex-col">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="min-h-screen bg-gray-50 p-6 flex flex-col relative pb-32">
+      <div className="mb-4 flex items-center justify-between relative z-10">
         <h1 className="text-2xl font-bold text-gray-800">Tus comidas</h1>
 
-        <button
-          onClick={() => setOpenFilters(true)}
-          className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-gray-100"
-          title="Filtros"
-        >
-          <FunnelIcon className="h-5 w-5" />
-          Filtros
-        </button>
-      </div>
-
-      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
-        {reactions.length > 0 && (
-          <span className="rounded-full bg-gray-200 px-3 py-1">
-            Reacción: {reactions.join(", ")}
-          </span>
-        )}
-        {type && (
-          <span className="rounded-full bg-gray-200 px-3 py-1">
-            Tipo: {type}
-          </span>
-        )}
-        {(dateFrom || dateTo) && (
-          <span className="rounded-full bg-gray-200 px-3 py-1">
-            Fecha: {dateFrom || "–"} → {dateTo || "–"}
-          </span>
-        )}
-        <span className="rounded-full bg-gray-100 px-3 py-1">
-          Orden: {sortDir === "desc" ? "Más nuevas" : "Más antiguas"}
-        </span>
-        {(reactions.length || type || dateFrom || dateTo) && (
+        <div className="flex items-center gap-3">
           <button
-            onClick={clearFilters}
-            className="ml-2 text-gray-600 underline decoration-dotted hover:text-gray-800"
+            onClick={() => {
+              setOpenFilters(true);
+              console.log("abrir filtros");
+            }}
+            className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-gray-100 relative z-20"
+            style={{ color: "#473f3f" }}
+            title="Filtros"
           >
-            Limpiar
+            <FunnelIcon className="h-5 w-5" />
+            Filtros
           </button>
-        )}
+
+          {status === "authenticated" && (
+            <div className="relative z-30" ref={menuRef}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen((v) => !v);
+                }}
+                className="p-2 rounded-lg hover:bg-gray-100 focus:outline-none"
+                aria-label="Menú"
+              >
+                <Bars3Icon className="h-6 w-6 text-gray-700" />
+              </button>
+
+              {menuOpen && (
+                <div
+                  className="absolute right-0 mt-2 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="px-4 pb-2 border-b border-gray-100">
+                    <EnableNotifications onDone={() => setMenuOpen(false)} />
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      signOut({ callbackUrl: window.location.origin });
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      {loading && <p>Cargando...</p>}
+      {loading && <p style={{ color: "#473f3f" }}>Cargando...</p>}
       {error && <p className="text-red-500">{error}</p>}
 
-      <div className="space-y-3">
+      <div className="space-y-3 mt-4">
         {filteredMeals.map((meal) => (
           <button
             key={meal._id}
@@ -262,7 +292,6 @@ export default function MealsPage() {
         onUpdated={handleUpdated}
         onDeleted={() => selectedMeal && handleDeleted(selectedMeal._id)}
       />
-
       {openFilters && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
@@ -403,16 +432,6 @@ export default function MealsPage() {
             </div>
           </div>
         </div>
-      )}
-      {status === "authenticated" && (
-        <span className="flex justify-end">
-          <button
-            onClick={() => signOut({ callbackUrl: "/" })}
-            className="w-20 px-3 py-1 my-8 rounded-lg border bg-white hover:bg-gray-50 text-sm text-gray-700"
-          >
-            Logout
-          </button>
-        </span>
       )}
     </div>
   );
