@@ -1,13 +1,23 @@
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
-import fs from "fs";
 import { dbConnect } from "@/lib/db";
 import { User } from "@/app/models/User";
 
-const path = process.env.FIREBASE_SERVICE_ACCOUNT_PATH!;
-const serviceAccount = JSON.parse(fs.readFileSync(path, "utf8"));
+let serviceAccount: any;
 
-if (!getApps().length) {
+if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+  try {
+    serviceAccount = JSON.parse(
+      process.env.FIREBASE_SERVICE_ACCOUNT_JSON.replace(/\\n/g, "\n")
+    );
+  } catch (err) {
+    console.error("❌ Error al parsear FIREBASE_SERVICE_ACCOUNT_JSON:", err);
+  }
+} else {
+  console.error("⚠️ No se encontró FIREBASE_SERVICE_ACCOUNT_JSON");
+}
+
+if (!getApps().length && serviceAccount) {
   initializeApp({
     credential: cert(serviceAccount),
   });
@@ -67,7 +77,7 @@ export async function POST(req: Request) {
     }
 
     const users = await User.find({ fcmToken: { $ne: null } });
-    const tokens = users.map((u) => u.fcmToken);
+    const tokens = users.map((u) => u.fcmToken).filter(Boolean);
 
     if (tokens.length === 0) {
       return Response.json(
