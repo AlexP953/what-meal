@@ -29,3 +29,16 @@ módulos exclusivos del servidor. Las pruebas de integración se ejecutan en ser
 Las rutas dinámicas resuelven `params` como promesa, conforme a
 [Next.js](https://nextjs.org/docs/app/api-reference/file-conventions/route#context-optional).
 Los tipos de Auth.js amplían los campos `id` y `role` del contrato JWT existente.
+
+## Configuración
+
+Copia `.env.example` a `.env.local`. Genera un secreto nuevo mediante
+`node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"`
+y escribe el resultado en `AUTH_SECRET`. No publiques ese archivo.
+
+`MONGODB_URI` identifica el servidor y `MONGODB_DB` la base nueva.
+El nombre admite letras ASCII, cifras, guiones y guiones bajos, hasta 63 caracteres.
+La autenticación exige un secreto de al menos 32 caracteres.
+Cada componente valida sus variables al consumirlas. La compilación no exige
+MongoDB ni credenciales Firebase. Los errores identifican la variable sin su valor.
+Las variables `NEXT_PUBLIC_*` son públicas y nunca contienen secretos.
