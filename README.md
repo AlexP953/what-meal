@@ -84,3 +84,30 @@ Las reglas adicionales de React, accesibilidad e imports de ese paquete no se
 incluyen. La revisión de accesibilidad continúa siendo una comprobación de interfaz.
 Solo se excluyen archivos generados. No se admiten advertencias de lint.
 [Configuración oficial](https://nextjs.org/docs/app/api-reference/config/eslint#using-the-plugin-directly).
+
+## MongoDB local
+
+Instala Docker Engine o Docker Desktop con Compose 2.24 o posterior.
+Comprueba `docker info` y `docker compose version`. Ejecuta:
+
+```bash
+docker compose up -d --wait mongo
+```
+
+MongoDB Community 8.0.38 está fijado mediante versión y digest. Solo publica
+`127.0.0.1:27017`. El volumen `mongo-data` conserva documentos al reiniciar.
+No se crean cuentas ni se importan datos anteriores. Esta configuración local
+sin contraseña exige que la máquina sea de confianza y no sirve para producción.
+
+`docker compose restart mongo` conserva los datos. `docker compose down` también
+conserva el volumen. **`docker compose down --volumes` elimina deliberadamente los
+datos de este proyecto.** No ejecutes esa eliminación para un reinicio ordinario.
+
+Puedes cambiar el puerto con `MONGODB_PORT` y ajustar `MONGODB_URI` al mismo puerto.
+Para ejecutar también la aplicación en un contenedor, configura `.env.local` y usa
+`docker compose --env-file .env.local --profile app up -d --build`.
+El contenedor usa Node y npm declarados, ejecuta `npm ci`, excluye secretos del
+contexto de construcción y funciona con un usuario sin privilegios.
+
+[Imagen oficial MongoDB](https://hub.docker.com/_/mongo).
+[Disponibilidad en Compose](https://docs.docker.com/compose/how-tos/startup-order/).

@@ -1,8 +1,8 @@
 node_modules
-.next/cache
+.next
 .git
-Dockerfile
-docker-compose.yml
+.agents
+.env*
 *.log
-.env.local
-.env.development
+*.tsbuildinfo
+coverage
