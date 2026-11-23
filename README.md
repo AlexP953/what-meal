@@ -111,3 +111,7 @@ contexto de construcción y funciona con un usuario sin privilegios.
 
 [Imagen oficial MongoDB](https://hub.docker.com/_/mongo).
 [Disponibilidad en Compose](https://docs.docker.com/compose/how-tos/startup-order/).
+
+La conexión espera como máximo 5000 ms para seleccionar un servidor y permite
+reintentos tras un fallo. Consulta [los contratos de persistencia](docs/persistence.md).
+Las pruebas de integración generan y eliminan únicamente sus bases aisladas.
