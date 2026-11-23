@@ -115,3 +115,11 @@ contexto de construcción y funciona con un usuario sin privilegios.
 La conexión espera como máximo 5000 ms para seleccionar un servidor y permite
 reintentos tras un fallo. Consulta [los contratos de persistencia](docs/persistence.md).
 Las pruebas de integración generan y eliminan únicamente sus bases aisladas.
+
+## Preparar la base nueva
+
+Después de configurar `.env.local` y arrancar MongoDB, ejecuta `npm run db:prepare`.
+El comando carga `.env.local`, crea las colecciones e índices ausentes y termina
+con `Database prepared.`. Repetirlo conserva documentos e índices adicionales.
+No genera usuarios ni comidas. Una base recién preparada permanece vacía.
+Para acceder con una cuenta nueva debes completar la quest de cuentas 149.

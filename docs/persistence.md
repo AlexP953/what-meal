@@ -98,3 +98,27 @@ se serializan explícitamente. Las quests consumidoras pueden unificar esos alia
 al especificar sus propios contratos HTTP.
 `src/app/types/index.ts` conserva nombres de tipos existentes mediante contratos
 públicos, sin importar Mongoose ni configuración privada.
+
+## Preparación y ejemplo
+
+`npm run db:prepare` utiliza `prepareDatabase` de `@/server/persistence/prepare`.
+Crea `users`, `meals` y sus índices, sin documentos iniciales. No utiliza
+`syncIndexes`, elimina índices ni importa datos anteriores. Si existen documentos
+incompatibles, informa de un fallo y exige corregirlos sin borrarlos automáticamente.
+El comando siempre cierra su conexión. La biblioteca deja la conexión al consumidor.
+
+```ts
+import { dbConnect } from "@/server/persistence/connection";
+import { Meal, serializeMeal } from "@/server/persistence/meal";
+
+// ownerId procede de un consumidor que ya comprueba existencia y permisos.
+await dbConnect();
+const rows = await Meal.find({ userId: ownerId }).lean();
+const publicMeals = rows.map(serializeMeal);
+```
+
+Los módulos de configuración privada se importan desde `@/server/config`.
+Los errores de configuración son `Error` con el nombre de la variable.
+Los errores de conexión son `DatabaseConnectionError`. Los errores de datos son
+`ValidationError` o `CastError`. La duplicidad usa el código MongoDB `11000`.
+Estos contratos no prescriben códigos HTTP ni políticas de autorización.
