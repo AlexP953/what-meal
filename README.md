@@ -74,3 +74,13 @@ El override `@grpc/grpc-js=1.14.7` corrige las dependencias transitivas de
 Firestore, que la aplicación no consume. Mantiene la versión mayor del protocolo.
 Véanse [GHSA-m9gg-hp2v-232j](https://github.com/advisories/GHSA-m9gg-hp2v-232j)
 y [GHSA-f596-whhp-79r4](https://github.com/advisories/GHSA-f596-whhp-79r4).
+
+## Comprobaciones estáticas
+
+`npm run typecheck` ejecuta TypeScript 5.9.3. `npm run lint` ejecuta ESLint
+10.15.0 con las reglas recomendadas de JavaScript, TypeScript, Next.js y Hooks.
+La configuración modular evita los peers incompatibles de `eslint-config-next`.
+Las reglas adicionales de React, accesibilidad e imports de ese paquete no se
+incluyen. La revisión de accesibilidad continúa siendo una comprobación de interfaz.
+Solo se excluyen archivos generados. No se admiten advertencias de lint.
+[Configuración oficial](https://nextjs.org/docs/app/api-reference/config/eslint#using-the-plugin-directly).

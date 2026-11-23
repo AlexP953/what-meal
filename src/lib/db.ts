@@ -1,14 +1,9 @@
 import mongoose from "mongoose";
 import { getDatabaseConfig } from "@/server/config";
 
-let cached = (global as any)._mongoose as {
-  conn: typeof mongoose | null;
-  promise: Promise<typeof mongoose> | null;
-};
-
-if (!cached) {
-  cached = (global as any)._mongoose = { conn: null, promise: null };
-}
+type Cache = { conn: typeof mongoose | null; promise: Promise<typeof mongoose> | null };
+const mongoGlobal = globalThis as typeof globalThis & { _mongoose?: Cache };
+const cached = mongoGlobal._mongoose ??= { conn: null, promise: null } as Cache;
 
 export async function dbConnect() {
   if (cached.conn) return cached.conn;

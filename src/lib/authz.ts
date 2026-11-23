@@ -13,7 +13,7 @@ export async function requireSession(): Promise<
   return { session };
 }
 
-export function isAdmin(session: any) {
+export function isAdmin(session: Session | null | undefined) {
   return session?.user?.role === "admin";
 }
 

@@ -13,13 +13,15 @@ export default function EnableNotifications({
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const userId = session?.user?.id;
+
   // 🔹 Verifica si el usuario ya tiene token guardado
   useEffect(() => {
-    if (!notificationsEnabled || status !== "authenticated" || !session?.user?.id) return;
+    if (!notificationsEnabled || status !== "authenticated" || !userId) return;
 
     async function checkToken() {
       try {
-        const res = await fetch(`/api/users/${session!.user!.id}`);
+        const res = await fetch(`/api/users/${userId}`);
         const data = await res.json();
         const tokens = data?.user?.fcmTokens || data?.user?.fcmToken;
         if (tokens && (Array.isArray(tokens) ? tokens.length > 0 : true)) {
@@ -33,7 +35,7 @@ export default function EnableNotifications({
     }
 
     checkToken();
-  }, [session?.user?.id, status]);
+  }, [userId, status]);
 
   // 🔹 Activar notificaciones
   async function enablePush() {
@@ -90,7 +92,7 @@ export default function EnableNotifications({
     if (!notificationsEnabled) return;
     try {
       setLoading(true);
-      if (!session?.user?.id) return;
+      if (!userId) return;
 
       await fetch(`/api/users/${session!.user!.id}/token`, {
         method: "DELETE",

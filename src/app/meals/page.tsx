@@ -63,22 +63,24 @@ export default function MealsPage() {
     return `${d}-${m}-${y}`;
   }
 
+  const userId = session?.user?.id;
+  const isLoading = status === "loading" || (status === "authenticated" && loading);
+
   useEffect(() => {
     if (status === "loading") return;
-    if (status !== "authenticated" || !session?.user?.id) {
-      setLoading(false);
+    if (status !== "authenticated" || !userId) {
       return;
     }
 
     async function fetchMeals() {
       try {
-        const res = await fetch(`/api/users/${session!.user!.id}`);
+        const res = await fetch(`/api/users/${userId}`);
         if (!res.ok) throw new Error("Error en la petición");
 
         const data = await res.json();
         const rawMeals = Array.isArray(data.user?.meals) ? data.user.meals : [];
         setMeals(rawMeals.filter(Boolean));
-      } catch (err) {
+      } catch {
         setError("No se pudieron cargar las comidas");
       } finally {
         setLoading(false);
@@ -86,7 +88,7 @@ export default function MealsPage() {
     }
 
     fetchMeals();
-  }, [session?.user?.id, status]);
+  }, [userId, status]);
 
   function handleCreated(newMeal: MealLean | undefined) {
     if (!newMeal || !newMeal._id || !newMeal.reaction) return;
@@ -212,7 +214,7 @@ export default function MealsPage() {
         </div>
       </div>
 
-      {loading && <p style={{ color: "#473f3f" }}>Cargando...</p>}
+      {isLoading && <p style={{ color: "#473f3f" }}>Cargando...</p>}
       {error && <p className="text-red-500">{error}</p>}
 
       <div className="space-y-3 mt-4">
@@ -260,7 +262,7 @@ export default function MealsPage() {
             </div>
           </button>
         ))}
-        {!loading && filteredMeals.length === 0 && (
+        {!isLoading && filteredMeals.length === 0 && (
           <p className="text-gray-500">
             No hay resultados con los filtros actuales.
           </p>

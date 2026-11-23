@@ -3,7 +3,7 @@ import LoginPage from "@/app/login/page";
 import MealsPage from "@/app/meals/page";
 
 export default async function Home() {
-  const { session, error } = await requireSession();
+  const { session } = await requireSession();
 
   return <> {session ? <MealsPage/> : <LoginPage/>}</>;
 }

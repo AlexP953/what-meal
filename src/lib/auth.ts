@@ -6,7 +6,7 @@ import { dbConnect } from "@/lib/db";
 import { User } from "@/app/models/User";
 import bcrypt from "bcryptjs";
 
-type UserAuth = { _id: any; email: string; passwordHash: string; name?: string; role: "admin"|"user" };
+type UserAuth = { _id: import("mongoose").Types.ObjectId; email: string; passwordHash: string; name?: string; role: "admin"|"user" };
 
 export const { auth, signIn, signOut, handlers: { GET, POST } } = NextAuth(() => ({
   secret: getAuthConfig().secret,

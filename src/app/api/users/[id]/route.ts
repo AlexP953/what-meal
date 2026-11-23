@@ -32,12 +32,12 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
   }
-  const { email, name, password, role } = parsed.data as any;
+  const { email, name, password, role } = parsed.data as z.infer<typeof updateUserAdminSchema>;
 
   try {
     await dbConnect();
 
-    const update: Record<string, any> = {};
+    const update: Record<string, string> = {};
     if (email) update.email = email.toLowerCase().trim();
     if (name) update.name = name;
     if (password) update.passwordHash = await bcrypt.hash(password, 12);

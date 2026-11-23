@@ -8,7 +8,7 @@ import { Types } from "mongoose";
 function isError<T>(
   x: T | { error: NextResponse }
 ): x is { error: NextResponse } {
-  return typeof (x as any)?.error !== "undefined";
+  return typeof (x as { error?: unknown })?.error !== "undefined";
 }
 
 export async function GET(req: Request) {
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
   const { session } = res;
 
   const url = new URL(req.url);
-  const filter: Record<string, any> = { userId: session.user!.id };
+  const filter: Record<string, string> = { userId: session.user!.id };
 
   const userIdParam = url.searchParams.get("userId");
   if (userIdParam && isAdmin(session)) {
