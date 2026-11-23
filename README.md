@@ -49,3 +49,7 @@ no se solicitan permisos ni se registra un trabajador. El trabajador anterior
 se sustituye por uno inerte que cancela su registro al actualizarse.
 La quest de notificaciones entrega la configuración y el trabajador nuevos antes
  de habilitar envíos en segundo plano.
+
+Las tres rutas de notificaciones responden `503` con
+`{"code":"NOTIFICATIONS_DISABLED"}` mientras la capacidad está desactivada.
+No conectan MongoDB ni inicializan Firebase Admin en ese estado.

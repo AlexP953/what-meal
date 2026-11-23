@@ -1,5 +1,7 @@
+import { notificationsEnabled } from "@/shared/config";
+import { notificationsDisabled } from "@/server/notifications/disabled";
 export async function POST(req: Request) {
-  const { token } = await req.json();
-  console.log("Nuevo token de notificación:", token);
+  if (!notificationsEnabled) return notificationsDisabled();
+  await req.json();
   return new Response("Token registrado", { status: 200 });
 }

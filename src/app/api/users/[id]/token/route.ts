@@ -1,3 +1,5 @@
+import { notificationsEnabled } from "@/shared/config";
+import { notificationsDisabled } from "@/server/notifications/disabled";
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import { User } from "@/app/models/User";
@@ -7,6 +9,7 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!notificationsEnabled) return notificationsDisabled();
   const { id } = await params;
   const { token } = await req.json();
 
@@ -38,6 +41,7 @@ export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!notificationsEnabled) return notificationsDisabled();
   const { id } = await params;
   await dbConnect();
   const objectId = new mongoose.Types.ObjectId(id);
