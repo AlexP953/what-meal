@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import "@/app/models/Meal";
-import { User } from "@/app/models/User";
+import { User, serializeUser, type UserRecord } from "@/server/persistence/user";
 import { requireSession, isAdmin, forbid } from "@/lib/authz";
 import { updateUserSchema } from "@/lib/validations";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { UserLean } from "../../../types";
 import { isValidObjectId } from "mongoose";
 
 const updateUserAdminSchema = updateUserSchema.extend({
@@ -56,11 +55,11 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       id,
       { $set: update },
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
-        projection: { email: 1, name: 1, tz: 1, role: 1 },
+        projection: { email: 1, name: 1, role: 1, createdAt: 1, updatedAt: 1 },
       }
-    ).lean<UserLean | null>();
+    ).lean<UserRecord | null>();
 
     if (!user)
       return NextResponse.json(
@@ -68,17 +67,17 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
         { status: 404 }
       );
 
+    const publicUser = serializeUser(user);
     return NextResponse.json(
       {
-        id: user._id.toString(),
-        email: user.email,
-        name: user.name ?? null,
-        role: user.role,
+        id: publicUser.id,
+        email: publicUser.email,
+        name: publicUser.name ?? null,
+        role: publicUser.role,
       },
       { status: 200 }
     );
-  } catch (e) {
-    console.error(e);
+  } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
@@ -104,8 +103,7 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     }
 
     return NextResponse.json({ message: "Usuario eliminado" }, { status: 200 });
-  } catch (e) {
-    console.error(e);
+  } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
@@ -127,7 +125,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     }
 
     const user = await User.findById(id)
-      .select("-passwordHash -__v")
+      .select("-passwordHash -fcmToken -__v")
       .populate({
         path: "meals",
         options: { sort: { date: -1, createdAt: -1 } },
@@ -137,9 +135,8 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ user }, { status: 200 });
-  } catch (e) {
-    console.error(e);
+    return NextResponse.json({ user: { ...serializeUser(user), meals: user.meals ?? [] } }, { status: 200 });
+  } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

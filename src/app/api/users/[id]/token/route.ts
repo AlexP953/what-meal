@@ -24,7 +24,7 @@ export async function POST(
   const user = await User.findByIdAndUpdate(
     objectId,
     { fcmToken: token },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   if (!user) {
@@ -34,7 +34,7 @@ export async function POST(
     );
   }
 
-  return NextResponse.json({ success: true, fcmToken: user.fcmToken });
+  return NextResponse.json({ success: true });
 }
 
 export async function DELETE(
@@ -49,7 +49,7 @@ export async function DELETE(
   const user = await User.findByIdAndUpdate(
     objectId,
     { fcmToken: null },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   if (!user) {
@@ -59,5 +59,5 @@ export async function DELETE(
     );
   }
 
-  return NextResponse.json({ success: true, fcmToken: null });
+  return NextResponse.json({ success: true });
 }

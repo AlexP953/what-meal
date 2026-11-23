@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
-import { User } from "@/app/models/User";
+import { User, serializeUser } from "@/server/persistence/user";
 import { registerSchema } from "@/lib/validations";
 import bcrypt from "bcryptjs";
 import { requireSession, isAdmin, forbid } from "@/lib/authz";
@@ -24,12 +24,12 @@ export async function POST(req: Request) {
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await User.create({ email: email.toLowerCase(), passwordHash, name, role });
 
+    const publicUser = serializeUser(user);
     return NextResponse.json(
-      { id: String(user._id), email: user.email, name: user.name, role: user.role ?? null },
+      { id: publicUser.id, email: publicUser.email, name: publicUser.name, role: publicUser.role ?? null },
       { status: 201 }
     );
-  } catch (e) {
-    console.error(e);
+  } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
@@ -44,12 +44,14 @@ export async function GET() {
     await dbConnect();
 
     const users = await User.find()
-      .select("email name role createdAt") 
+      .select("email name role createdAt updatedAt")
       .lean();
 
-    return NextResponse.json({ users }, { status: 200 });
-  } catch (e) {
-    console.error(e);
+    return NextResponse.json({ users: users.map((user) => {
+      const { _id, email, name, role, createdAt } = serializeUser(user);
+      return { _id, email, name, role, createdAt };
+    }) }, { status: 200 });
+  } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

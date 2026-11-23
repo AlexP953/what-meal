@@ -53,3 +53,12 @@ documentos y consultas lean. No incluye hashes ni tokens aunque estén cargados.
 La transformación `toJSON` aplica esa protección y conserva comidas pobladas.
 La autenticación solicita explícitamente `+passwordHash`.
 Los consumidores de notificaciones deben solicitar `+fcmToken`.
+
+Las rutas de cuentas mantienen sus envoltorios HTTP (`users`, `user` o campos
+sueltos), pero utilizan serialización explícita para documentos y resultados lean.
+Las rutas de token confirman el éxito sin devolver el token.
+La quest 149 define creación inicial, sesiones y permisos. La quest 152 define
+suscripciones, trabajador y envíos. Este contrato no autoriza propietarios ni crea
+cuentas iniciales. Los errores de unicidad tienen código MongoDB `11000` y los
+fallos de validación usan `mongoose.Error.ValidationError` o `CastError`.
+No conviertas directamente esas excepciones a JSON ni registres sus documentos.
