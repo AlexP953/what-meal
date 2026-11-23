@@ -42,3 +42,10 @@ La autenticación exige un secreto de al menos 32 caracteres.
 Cada componente valida sus variables al consumirlas. La compilación no exige
 MongoDB ni credenciales Firebase. Los errores identifican la variable sin su valor.
 Las variables `NEXT_PUBLIC_*` son públicas y nunca contienen secretos.
+
+Las notificaciones permanecen desactivadas salvo activación explícita mediante
+`NEXT_PUBLIC_NOTIFICATIONS_ENABLED=true`. En modo desactivado no se carga Firebase,
+no se solicitan permisos ni se registra un trabajador. El trabajador anterior
+se sustituye por uno inerte que cancela su registro al actualizarse.
+La quest de notificaciones entrega la configuración y el trabajador nuevos antes
+ de habilitar envíos en segundo plano.
