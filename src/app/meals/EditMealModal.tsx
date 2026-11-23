@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MealLean } from "../types";
 import { TrashIcon } from "@heroicons/react/24/outline";
 
-type Reaction = "good" | "neutral" | "bad";
-type MealType = "breakfast" | "lunch" | "dinner" | "snack";
+import type { MealReaction as Reaction, MealType } from "@/shared/meal";
 
 export default function EditMealModal({
   open,

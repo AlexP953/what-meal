@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
-import "@/app/models/Meal";
+import { serializeMeal, type MealRecord } from "@/server/persistence/meal";
 import { User, serializeUser, type UserRecord } from "@/server/persistence/user";
 import { requireSession, isAdmin, forbid } from "@/lib/authz";
 import { updateUserSchema } from "@/lib/validations";
@@ -126,7 +126,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
     const user = await User.findById(id)
       .select("-passwordHash -fcmToken -__v")
-      .populate({
+      .populate<{ meals: MealRecord[] }>({
         path: "meals",
         options: { sort: { date: -1, createdAt: -1 } },
       });
@@ -135,7 +135,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ user: { ...serializeUser(user), meals: user.meals ?? [] } }, { status: 200 });
+    return NextResponse.json({ user: { ...serializeUser(user), meals: (user.meals ?? []).map(serializeMeal) } }, { status: 200 });
   } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }

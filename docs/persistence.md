@@ -89,3 +89,12 @@ Al actualizar mediante consultas, utiliza `{runValidators: true}`.
 MongoDB no comprueba que exista el User referenciado. El consumidor comprueba
 existencia y permisos antes de escribir. La quest 150 define operaciones, filtros
 y autorización del diario. Los modelos no incorporan reglas de sesiones ni permisos.
+
+Las rutas del diario conservan sus envoltorios y alias HTTP existentes:
+la lista y la creación devuelven `id` y `user`, mientras el detalle utiliza `meal`.
+La actualización conserva `meal.id`. Los adaptadores emplean el serializador
+común antes de construir cada respuesta. Las comidas pobladas de cuentas también
+se serializan explícitamente. Las quests consumidoras pueden unificar esos alias
+al especificar sus propios contratos HTTP.
+`src/app/types/index.ts` conserva nombres de tipos existentes mediante contratos
+públicos, sin importar Mongoose ni configuración privada.

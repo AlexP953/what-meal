@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
-import { Meal } from "@/app/models/Meal";
+import { Meal, serializeMeal } from "@/server/persistence/meal";
 import { addMealSchema } from "@/lib/validations";
 import { requireSession, isAdmin } from "@/lib/authz";
 import { Types } from "mongoose";
@@ -32,8 +32,8 @@ export async function GET(req: Request) {
     .sort({ date: -1, createdAt: -1 })
     .lean();
   return NextResponse.json(
-    items.map((m) => ({
-      id: m._id!.toString(),
+    items.map(serializeMeal).map((m) => ({
+      id: m.id,
       name: m.name,
       date: m.date,
       type: m.type,
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
   }
 
   await dbConnect();
-  const doc = await Meal.create({ ...parsed.data, userId: session.user!.id });
+  const doc = serializeMeal(await Meal.create({ ...parsed.data, userId: session.user!.id }));
   return NextResponse.json(
     {
       id: doc._id.toString(),

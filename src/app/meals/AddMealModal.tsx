@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MealLean } from "../types";
 
-type Reaction = "good" | "neutral" | "bad";
-type MealType = "breakfast" | "lunch" | "dinner" | "snack";
+import type { MealReaction as Reaction, MealType } from "@/shared/meal";
 
 export default function AddMealModal({
   open,

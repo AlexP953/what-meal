@@ -6,7 +6,7 @@ vi.mock("@/lib/authz", () => ({
   forbid: () => Response.json({}, { status: 403 }),
 }));
 vi.mock("@/lib/db", () => ({ dbConnect: async () => undefined }));
-vi.mock("@/app/models/Meal", () => ({ Meal: { findById: async () => null } }));
+vi.mock("@/server/persistence/meal", async (importOriginal) => ({ ...await importOriginal<typeof import("@/server/persistence/meal")>(), Meal: { findById: async () => null } }));
 
 import { PATCH } from "@/app/api/meals/[id]/route";
 import { authConfig } from "@/lib/auth.config";

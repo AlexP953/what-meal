@@ -8,8 +8,7 @@ import EditMealModal from "./EditMealModal";
 import { FunnelIcon, XMarkIcon, Bars3Icon } from "@heroicons/react/24/outline";
 import EnableNotifications from "../components/EnableNotifications";
 
-type Reaction = "good" | "neutral" | "bad";
-type MealType = "breakfast" | "lunch" | "dinner" | "snack";
+import type { MealReaction as Reaction, MealType } from "@/shared/meal";
 
 const typeLabels: Record<MealLean["type"], string> = {
   breakfast: "Desayuno",
