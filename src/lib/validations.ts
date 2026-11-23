@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isCivilDate, mealTypes, mealReactions } from "@/shared/meal";
 
 export const registerSchema = z.object({
   email: z.string().email(),
@@ -18,23 +19,23 @@ export const updateUserSchema = z
   });
 
 export const addMealSchema = z.object({
-  name: z.string(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato esperado: YYYY-MM-DD"),
-  type: z.enum(["breakfast", "lunch", "dinner", "snack"]),
-  reaction: z.enum(["good", "bad", "neutral"]),
+  name: z.string().trim().min(1),
+  date: z.string().refine(isCivilDate, "Fecha civil inválida: YYYY-MM-DD"),
+  type: z.enum(mealTypes),
+  reaction: z.enum(mealReactions),
   place: z.string().optional(),
   notes: z.string().optional(),
 });
 
 export const updateMealSchema = z
   .object({
-    name: z.string().optional(),
+    name: z.string().trim().min(1).optional(),
     date: z
       .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "Formato esperado: YYYY-MM-DD")
+      .refine(isCivilDate, "Fecha civil inválida: YYYY-MM-DD")
       .optional(),
-    type: z.enum(["breakfast", "lunch", "dinner", "snack"]).optional(),
-    reaction: z.enum(["good", "bad", "neutral"]).optional(),
+    type: z.enum(mealTypes).optional(),
+    reaction: z.enum(mealReactions).optional(),
     place: z.string().optional(),
     notes: z.string().optional(),
   })

@@ -62,3 +62,30 @@ suscripciones, trabajador y envíos. Este contrato no autoriza propietarios ni c
 cuentas iniciales. Los errores de unicidad tienen código MongoDB `11000` y los
 fallos de validación usan `mongoose.Error.ValidationError` o `CastError`.
 No conviertas directamente esas excepciones a JSON ni registres sus documentos.
+
+## Meal
+
+Importa `Meal`, `MealRecord` y `serializeMeal` desde
+`@/server/persistence/meal`. `@/app/models/Meal` conserva el adaptador existente.
+Importa contratos, enumeraciones e `isCivilDate` desde `@/shared/meal` en clientes.
+
+| Campo | Contrato |
+| --- | --- |
+| `_id` | ObjectId generado por MongoDB |
+| `userId` | ObjectId obligatorio, referencia User |
+| `name` | Cadena obligatoria no vacía tras eliminar espacios exteriores |
+| `date` | Fecha civil gregoriana válida, cadena `YYYY-MM-DD` |
+| `type` | `breakfast`, `lunch`, `dinner` o `snack` |
+| `reaction` | `good`, `bad` o `neutral` |
+| `place`, `notes` | Cadenas opcionales |
+| `createdAt`, `updatedAt` | Fechas mantenidas por Mongoose |
+
+Los índices compuestos son `{userId: 1, date: -1}`, `{userId: 1, type: 1}` y
+`{userId: 1, reaction: 1}`. Se conservan índices simples de esos cuatro campos.
+La fecha civil nunca se convierte a Date ni depende de una zona horaria.
+El serializador representa identificadores como cadenas y marcas temporales ISO 8601.
+Al actualizar mediante consultas, utiliza `{runValidators: true}`.
+
+MongoDB no comprueba que exista el User referenciado. El consumidor comprueba
+existencia y permisos antes de escribir. La quest 150 define operaciones, filtros
+y autorización del diario. Los modelos no incorporan reglas de sesiones ni permisos.
