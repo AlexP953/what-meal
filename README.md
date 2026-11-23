@@ -53,3 +53,24 @@ La quest de notificaciones entrega la configuración y el trabajador nuevos ante
 Las tres rutas de notificaciones responden `503` con
 `{"code":"NOTIFICATIONS_DISABLED"}` mientras la capacidad está desactivada.
 No conectan MongoDB ni inicializan Firebase Admin en ese estado.
+
+## Compatibilidad
+
+Next.js 16.4.6 utiliza React 19.3.1. Se conserva Auth.js 5.0.0-beta.32
+con Credentials y sesiones JWT para evitar sustituir la autenticación.
+Mongoose 9.13.0 conserva MongoDB como motor de persistencia.
+El archivo `src/proxy.ts` conserva el matcher del middleware anterior.
+
+- [Migración Next.js 16](https://nextjs.org/docs/app/guides/upgrading/version-16).
+- [Compatibilidad Mongoose y MongoDB](https://mongoosejs.com/docs/compatibility.html).
+- [Compatibilidad Auth.js](https://registry.npmjs.org/next-auth/5.0.0-beta.32).
+
+Firebase 13.4.0 y Firebase Admin 14.5.1 mantienen las APIs modulares utilizadas.
+Las versiones antiguas arrastran dependencias vulnerables. La instalación utiliza
+las versiones actuales sin habilitar notificaciones.
+[Notas oficiales](https://firebase.google.com/support/release-notes/admin/node).
+
+El override `@grpc/grpc-js=1.14.7` corrige las dependencias transitivas de
+Firestore, que la aplicación no consume. Mantiene la versión mayor del protocolo.
+Véanse [GHSA-m9gg-hp2v-232j](https://github.com/advisories/GHSA-m9gg-hp2v-232j)
+y [GHSA-f596-whhp-79r4](https://github.com/advisories/GHSA-f596-whhp-79r4).
