@@ -6,14 +6,14 @@ export const authConfig = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.uid = (user as any).id;
-        token.role = (user as any).role;
+        token.uid = user.id;
+        token.role = user.role;
       }
       return token;
     },
     async session({ session, token }) {
-      (session as any).user.id = token.uid as string;
-      (session as any).user.role = token.role as string;
+      session.user.id = token.uid as string;
+      session.user.role = token.role as "admin" | "user";
       return session;
     },
   },

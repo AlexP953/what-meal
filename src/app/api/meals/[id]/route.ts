@@ -15,11 +15,11 @@ const ALLOWED_FIELDS = new Set([
   "notes",
 ]);
 
-export async function PATCH(req: Request, context: any) {
+export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await requireSession();
   if (error) return error;
 
-  const { id } = (context as { params: { id: string } }).params;
+  const { id } = await context.params;
 
   if (!isValidObjectId(id)) {
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
@@ -80,8 +80,8 @@ export async function PATCH(req: Request, context: any) {
   );
 }
 
-export async function DELETE(req: Request, context: any) {
-  const { id } = (context as { params: { id: string } }).params;
+export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params;
 
   const { session, error } = await requireSession();
   if (error) return error;
@@ -116,11 +116,11 @@ export async function DELETE(req: Request, context: any) {
   }
 }
 
-export async function GET(req: Request, context: any) {
+export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await requireSession();
   if (error) return error;
 
-  const { id } = (context as { params: { id: string } }).params;
+  const { id } = await context.params;
 
   try {
     await dbConnect();

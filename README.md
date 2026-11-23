@@ -25,3 +25,7 @@ módulos exclusivos del servidor. Las pruebas de integración se ejecutan en ser
 - [Distribución oficial de Node.js](https://nodejs.org/dist/v24.22.3/SHASUMS256.txt).
 - [Requisitos de Vitest](https://vitest.dev/guide/).
 - [Proyectos de Vitest](https://vitest.dev/guide/projects).
+
+Las rutas dinámicas resuelven `params` como promesa, conforme a
+[Next.js](https://nextjs.org/docs/app/api-reference/file-conventions/route#context-optional).
+Los tipos de Auth.js amplían los campos `id` y `role` del contrato JWT existente.
