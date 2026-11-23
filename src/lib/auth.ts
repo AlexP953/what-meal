@@ -18,7 +18,7 @@ export const { auth, signIn, signOut, handlers: { GET, POST } } = NextAuth(() =>
         const email = String(creds?.email || "").toLowerCase().trim();
         const password = String(creds?.password || "");
         await dbConnect();
-        const user = await User.findOne({ email }).lean<UserAuth | null>();
+        const user = await User.findOne({ email }).select("+passwordHash").lean<UserAuth | null>();
         if (!user) return null;
         const ok = await bcrypt.compare(password, user.passwordHash);
         if (!ok) return null;

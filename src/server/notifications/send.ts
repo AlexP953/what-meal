@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     }
 
     if (userId) {
-      const user = await User.findById(userId);
+      const user = await User.findById(userId).select("+fcmToken");
       if (!user?.fcmToken) {
         return Response.json(
           { success: false, error: "Usuario sin token o no encontrado" },
@@ -62,8 +62,8 @@ export async function POST(req: Request) {
       return Response.json({ success: true, type: "single-user", id: response });
     }
 
-    const users = await User.find({ fcmToken: { $ne: null } });
-    const tokens = users.map((u) => u.fcmToken).filter(Boolean);
+    const users = await User.find({ fcmToken: { $ne: null } }).select("+fcmToken");
+    const tokens = users.map((u) => u.fcmToken).filter((token): token is string => typeof token === "string" && token.length > 0);
 
     if (tokens.length === 0) {
       return Response.json(

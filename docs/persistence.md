@@ -29,3 +29,27 @@ su valor predeterminado es `mongodb://127.0.0.1:27017`.
 Cada archivo genera una base `whatmeal_test_<uuid>`. La limpieza comprueba el nombre
 exacto de su base antes de eliminarla y siempre cierra la conexión.
 Las pruebas nunca utilizan `MONGODB_DB` para elegir un destino de limpieza.
+
+## User
+
+Importa `User`, `UserRecord` y `serializeUser` desde
+`@/server/persistence/user`. `@/app/models/User` conserva un adaptador.
+Los componentes cliente importan `PublicUser` y `UserRole` desde `@/shared/user`.
+
+| Campo | Contrato |
+| --- | --- |
+| `_id` | ObjectId generado por MongoDB |
+| `email` | Cadena obligatoria, sin espacios exteriores y en minúsculas |
+| `passwordHash` | Cadena obligatoria, excluida de consultas por defecto |
+| `name` | Cadena opcional |
+| `role` | `admin` o `user`, predeterminado `user` |
+| `fcmToken` | Cadena o null, predeterminado null, excluida por defecto |
+| `createdAt`, `updatedAt` | Fechas mantenidas por Mongoose |
+
+Los índices incluyen correo único y rol. La unicidad reside en MongoDB y protege
+las escrituras simultáneas. `serializeUser` permite únicamente campos públicos,
+convierte `_id` y su alias `id` a cadenas y las fechas a ISO 8601. Funciona con
+documentos y consultas lean. No incluye hashes ni tokens aunque estén cargados.
+La transformación `toJSON` aplica esa protección y conserva comidas pobladas.
+La autenticación solicita explícitamente `+passwordHash`.
+Los consumidores de notificaciones deben solicitar `+fcmToken`.
