@@ -123,3 +123,18 @@ El comando carga `.env.local`, crea las colecciones e índices ausentes y termin
 con `Database prepared.`. Repetirlo conserva documentos e índices adicionales.
 No genera usuarios ni comidas. Una base recién preparada permanece vacía.
 Para acceder con una cuenta nueva debes completar la quest de cuentas 149.
+
+## Integración continua
+
+El flujo `CI / quality` comprueba cada push y pull request con el entorno de
+`.nvmrc` y `package.json`. Ejecuta instalación limpia, tipos, lint, pruebas
+unitarias, auditoría de vulnerabilidades altas, integración y compilación.
+MongoDB utiliza la misma imagen fijada en Compose. Cada ejecución crea su
+propio proyecto y las pruebas generan bases aisladas. El flujo detiene MongoDB
+antes de compilar, sin configurar Firebase ni secretos de servicios anteriores.
+Comprueba que `package-lock.json` permanece intacto y elimina los recursos de
+su proyecto tras una comprobación fallida mientras el runner permanece disponible.
+
+La configuración sigue la [sintaxis oficial de GitHub Actions](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax)
+y [setup-node](https://github.com/actions/setup-node#usage).
+La protección de ramas y los despliegues corresponden a la quest 153.

@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      COMPOSE_PROJECT_NAME: whatmeal-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_NOTIFICATIONS_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Verify declared environment
+        run: |
+          node -e 'const { engines } = require("./package.json"); if (process.version !== `v${engines.node}`) process.exit(1)'
+          test "$(npm --version)" = "$(node -p 'require("./package.json").engines.npm')"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm audit --audit-level=high
+      - name: Start isolated MongoDB
+        run: docker compose up -d --wait mongo
+      - run: npm run test:integration
+      - name: Stop MongoDB before build
+        run: docker compose stop mongo
+      - run: npm run build
+      - name: Verify unchanged lockfile
+        run: git diff --exit-code -- package-lock.json
+      - name: Remove this job's database resources
+        if: always()
+        run: docker compose down --volumes
