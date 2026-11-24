@@ -83,6 +83,9 @@ Copia `.env.example` a `.env.local`. Genera un secreto nuevo mediante
 y escribe el resultado en `AUTH_SECRET`. No publiques ese archivo.
 
 `MONGODB_URI` identifica el servidor y `MONGODB_DB` la base nueva.
+El controlador valida la sintaxis de la URI sin conectar ni consultar DNS.
+Admite servidores múltiples, credenciales codificadas y direcciones SRV.
+Los errores de sintaxis identifican `MONGODB_URI` sin mostrar su contenido.
 El nombre admite letras ASCII, cifras, guiones y guiones bajos, hasta 63 caracteres.
 La autenticación exige un secreto de al menos 32 caracteres.
 Cada componente valida sus variables al consumirlas. La compilación no exige

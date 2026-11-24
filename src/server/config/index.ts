@@ -1,4 +1,5 @@
 import "server-only";
+import { mongo } from "mongoose";
 
 type Environment = Record<string, string | undefined>;
 
@@ -8,7 +9,14 @@ function invalid(name: string): never {
 
 export function getDatabaseConfig(env: Environment = process.env) {
   const uri = env.MONGODB_URI;
-  if (!uri || !/^mongodb(?:\+srv)?:\/\/[^\s]+$/.test(uri)) invalid("MONGODB_URI");
+  if (!uri) invalid("MONGODB_URI");
+  try {
+    // Construction parses options only. DNS and sockets require connect().
+    // https://www.mongodb.com/docs/drivers/node/current/connect/mongoclient/
+    new mongo.MongoClient(uri);
+  } catch {
+    invalid("MONGODB_URI");
+  }
   const dbName = env.MONGODB_DB;
   if (!dbName || !/^[a-zA-Z0-9_-]{1,63}$/.test(dbName)) invalid("MONGODB_DB");
   return { uri, dbName };
