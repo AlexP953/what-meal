@@ -62,6 +62,34 @@ No utilices `--force` ni `--legacy-peer-deps`.
 - `npm start`: ejecución de la compilación.
 - `npm test`: pruebas unitarias (`tests/unit`).
 - `npm run test:integration`: pruebas con MongoDB real (`tests/integration`).
+- `npm run verify:local`: instalación y reinicios en recursos temporales aislados.
+
+`verify:local` requiere Linux, Bash, GNU tar, curl y util-linux (`setsid` y
+`timeout`), además del entorno declarado y Docker Compose. Copia únicamente
+archivos versionados del árbol de trabajo. Añade los archivos nuevos al índice
+de Git antes de comprobarlos. No copia `.env.local` ni usa la configuración
+heredada del entorno ni los archivos personales o globales de npm.
+Genera su propio secreto temporal de autenticación.
+
+El comando ejecuta `npm ci`, compara el lockfile, prepara MongoDB dos veces y
+comprueba que no existen cuentas ni comidas. Comprueba `/login` por HTTP en
+desarrollo y producción. Un documento de prueba demuestra persistencia después
+de reiniciar la aplicación y MongoDB. La compilación sucede con MongoDB detenido
+y sin las variables de persistencia ni autenticación.
+
+Cada ejecución genera un proyecto Compose con volumen propio y puertos locales
+asignados por el sistema. Consulta de nuevo el puerto después de los reinicios.
+Al terminar, incluso con errores o señales INT/TERM, detiene sus procesos y
+elimina únicamente sus recursos. No modifica el MongoDB de desarrollo.
+Los límites de tiempo evitan esperas indefinidas. Una terminación forzada del
+runner (SIGKILL) impide ejecutar la limpieza.
+
+La comprobación HTTP no ejecuta JavaScript del navegador. La revisión de `/login`
+en un navegador comprueba además consola, solicitudes, permisos y trabajadores
+con las notificaciones desactivadas, tanto en desarrollo como en producción.
+El comando utiliza la [CLI de Next.js](https://nextjs.org/docs/app/api-reference/cli/next),
+[la espera de Compose](https://docs.docker.com/reference/cli/docker/compose/up/)
+y [la consulta del puerto publicado](https://docs.docker.com/reference/cli/docker/compose/port/).
 
 Vitest utiliza proyectos separados y la condición `react-server` para probar
 módulos exclusivos del servidor. Las pruebas de integración se ejecutan en serie.

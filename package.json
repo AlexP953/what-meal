@@ -10,6 +10,7 @@
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "typecheck": "tsc --noEmit",
+    "verify:local": "bash scripts/verify-local.sh",
     "db:prepare": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/db-prepare.ts"
   },
   "dependencies": {
