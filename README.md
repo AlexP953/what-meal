@@ -209,8 +209,13 @@ Para acceder con una cuenta nueva debes completar la quest de cuentas 149.
 El flujo `CI / quality` comprueba cada push y pull request con el entorno de
 `.nvmrc` y `package.json`. Ejecuta instalación limpia, tipos, lint, pruebas
 unitarias, auditoría de vulnerabilidades altas, integración y compilación.
+La integración comprueba las fechas civiles con `TZ=UTC` y
+`TZ=Pacific/Kiritimati`. Después ejecuta `npm run verify:local`, que informa
+su resultado y duración. El flujo dispone de 20 minutos para cubrir descargas,
+compilaciones y reinicios, con margen sobre la ejecución local.
 MongoDB utiliza la misma imagen fijada en Compose. Cada ejecución crea su
-propio proyecto y las pruebas generan bases aisladas. El flujo detiene MongoDB
+propio proyecto con puerto asignado por el sistema y las pruebas generan bases
+aisladas. El flujo detiene MongoDB
 antes de compilar, sin configurar Firebase ni secretos de servicios anteriores.
 Comprueba que `package-lock.json` permanece intacto y elimina los recursos de
 su proyecto tras una comprobación fallida mientras el runner permanece disponible.

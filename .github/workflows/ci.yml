@@ -10,9 +10,10 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       COMPOSE_PROJECT_NAME: whatmeal-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      MONGODB_PORT: "0"
       NEXT_TELEMETRY_DISABLED: "1"
       NEXT_PUBLIC_NOTIFICATIONS_ENABLED: "false"
     steps:
@@ -33,11 +34,19 @@ jobs:
       - run: npm test
       - run: npm audit --audit-level=high
       - name: Start isolated MongoDB
-        run: docker compose up -d --wait mongo
-      - run: npm run test:integration
+        run: docker compose up -d --wait --wait-timeout 90 mongo
+      - name: Verify persistence in both civil-date timezones
+        run: |
+          address=$(docker compose port mongo 27017)
+          [[ "$address" =~ ^127\.0\.0\.1:[0-9]+$ ]]
+          for timezone in UTC Pacific/Kiritimati; do
+            TZ="$timezone" TEST_MONGODB_URI="mongodb://$address" npm run test:integration
+          done
       - name: Stop MongoDB before build
         run: docker compose stop mongo
       - run: npm run build
+      - name: Verify clean local installation and restarts
+        run: npm run verify:local
       - name: Verify unchanged lockfile
         run: git diff --exit-code -- package-lock.json
       - name: Remove this job's database resources
