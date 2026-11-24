@@ -164,6 +164,9 @@ contexto de construcción y funciona con un usuario sin privilegios.
 La conexión espera como máximo 5000 ms para seleccionar un servidor y permite
 reintentos tras un fallo. Consulta [los contratos de persistencia](docs/persistence.md).
 Las pruebas de integración generan y eliminan únicamente sus bases aisladas.
+Las pruebas unitarias de conexión controlan los intentos pendientes y simulan
+recargas de módulos. Comprueban identidad de promesa, intento único y recuperación
+con la configuración vigente después de un rechazo.
 
 ## Preparar la base nueva
 
