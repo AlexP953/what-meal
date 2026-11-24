@@ -32,7 +32,7 @@ const userSchema = new Schema<UserRecord>({
   email: { type: String, required: true, trim: true, lowercase: true },
   passwordHash: { type: String, required: true, select: false },
   name: String,
-  role: { type: String, enum: ["admin", "user"], default: "user", index: true },
+  role: { type: String, required: true, enum: ["admin", "user"], default: "user", index: true },
   fcmToken: { type: String, default: null, select: false },
 }, { timestamps: true });
 userSchema.index({ email: 1 }, { unique: true });

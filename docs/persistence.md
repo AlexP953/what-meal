@@ -42,7 +42,7 @@ Los componentes cliente importan `PublicUser` y `UserRole` desde `@/shared/user`
 | `email` | Cadena obligatoria, sin espacios exteriores y en minúsculas |
 | `passwordHash` | Cadena obligatoria, excluida de consultas por defecto |
 | `name` | Cadena opcional |
-| `role` | `admin` o `user`, predeterminado `user` |
+| `role` | Obligatorio, `admin` o `user`, predeterminado `user` |
 | `fcmToken` | Cadena o null, predeterminado null, excluida por defecto |
 | `createdAt`, `updatedAt` | Fechas mantenidas por Mongoose |
 
@@ -53,6 +53,9 @@ documentos y consultas lean. No incluye hashes ni tokens aunque estén cargados.
 La transformación `toJSON` aplica esa protección y conserva comidas pobladas.
 La autenticación solicita explícitamente `+passwordHash`.
 Los consumidores de notificaciones deben solicitar `+fcmToken`.
+El rol no admite null ni eliminación mediante `$unset`.
+Las actualizaciones mediante consultas requieren `{runValidators: true}` para
+aplicar las validaciones del esquema, incluida la obligatoriedad del rol.
 
 Las rutas de cuentas mantienen sus envoltorios HTTP (`users`, `user` o campos
 sueltos), pero utilizan serialización explícita para documentos y resultados lean.

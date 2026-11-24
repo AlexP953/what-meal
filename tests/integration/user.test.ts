@@ -47,3 +47,25 @@ it("requires credentials and valid roles without creating defaults", async () =>
   const user = await User.create({ email: "default@example.com", passwordHash: "hash" });
   expect(user.fcmToken).toBeNull();
 });
+
+it("rejects an explicitly null role during creation", async () => {
+  const email = "null-role@example.com";
+  const invalidUser: Record<string, unknown> = {
+    email, passwordHash: "hash", role: null,
+  };
+  await expect(User.create(invalidUser)).rejects.toMatchObject({
+    name: "ValidationError", errors: { role: { kind: "required" } },
+  });
+  expect(await User.findOne({ email })).toBeNull();
+});
+
+it.each([
+  { name: "null", update: { $set: { role: null } } },
+  { name: "unset", update: { $unset: { role: 1 } } },
+])("rejects $name role updates and preserves the stored role", async ({ name, update }) => {
+  const user = await User.create({ email: `${name}-update@example.com`, passwordHash: "hash" });
+  await expect(User.updateOne({ _id: user._id }, update, { runValidators: true })).rejects.toMatchObject({
+    name: "ValidationError", errors: { role: { kind: "required" } },
+  });
+  expect((await User.findById(user._id).orFail()).role).toBe("user");
+});
