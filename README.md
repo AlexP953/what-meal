@@ -2,6 +2,52 @@
 
 Aplicación Next.js con React, TypeScript, Auth.js y MongoDB.
 
+## Instalación desde cero
+
+Necesitas Git, Node.js y npm en las versiones indicadas abajo, además de Docker
+con Compose. Desde una copia nueva del repositorio:
+
+```bash
+npm ci
+cp .env.example .env.local
+```
+
+Genera `AUTH_SECRET` como explica Configuración y escribe su valor en `.env.local`.
+Conserva las direcciones locales y las notificaciones desactivadas del ejemplo.
+
+```bash
+docker compose up -d --wait mongo
+npm run db:prepare
+npm run db:prepare
+npm run typecheck
+npm run lint
+npm test
+npm run test:integration
+npm run dev -- --hostname 127.0.0.1
+```
+
+Abre `http://localhost:3000/login`. La pantalla de acceso debe aparecer sin
+configurar Firebase ni solicitar permisos de notificaciones. La base nueva no
+contiene cuentas. Detén desarrollo con Ctrl+C antes de continuar:
+
+```bash
+docker compose stop mongo
+npm run build
+git diff --exit-code -- package-lock.json
+docker compose up -d --wait mongo
+npm start -- --hostname 127.0.0.1
+```
+
+Abre de nuevo `/login` para comprobar la compilación. Ctrl+C detiene la
+aplicación. `npm start` la reinicia sin eliminar documentos. Reinicia MongoDB con
+`docker compose restart mongo`. Al terminar, `docker compose down` detiene los
+contenedores y conserva el volumen. Consulta MongoDB local antes de eliminar datos.
+
+Las pruebas verifican CRUD, índices, serialización y recuperación de conexión.
+Cada archivo de integración utiliza una base generada `whatmeal_test_*` y elimina
+solo esa base. `TEST_MONGODB_URI` permite usar otro servidor local para las pruebas.
+No configures esa variable con servicios anteriores o bases de producción.
+
 ## Entorno
 
 Utiliza Node.js **24.22.3 LTS** y npm **11.19.1**, distribuido con esa versión.
