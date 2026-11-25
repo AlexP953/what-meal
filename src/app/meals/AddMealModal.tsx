@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MealLean } from "../types";
 
-type Reaction = "good" | "neutral" | "bad";
-type MealType = "breakfast" | "lunch" | "dinner" | "snack";
+import type { MealReaction as Reaction, MealType } from "@/shared/meal";
 
 export default function AddMealModal({
   open,
@@ -74,7 +73,7 @@ export default function AddMealModal({
       });
 
       const raw = await res.text(); 
-      let json: any = null;
+      let json: { error?: string; message?: string; meal?: Partial<MealLean> } | null = null;
       try {
         json = raw ? JSON.parse(raw) : null;
       } catch {
@@ -104,8 +103,8 @@ export default function AddMealModal({
 
       onCreated(created); 
       onClose(); 
-    } catch (err: any) {
-      setError(err?.message || "No se pudo crear el meal");
+    } catch (err) {
+      setError((err instanceof Error ? err.message : "") || "No se pudo crear el meal");
       console.error("Create meal error:", err);
     } finally {
       setSubmitting(false);

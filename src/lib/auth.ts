@@ -1,13 +1,15 @@
 import NextAuth from "next-auth";
+import { getAuthConfig } from "@/server/config";
 import Credentials from "next-auth/providers/credentials";
 import { authConfig } from "./auth.config";
 import { dbConnect } from "@/lib/db";
 import { User } from "@/app/models/User";
 import bcrypt from "bcryptjs";
 
-type UserAuth = { _id: any; email: string; passwordHash: string; name?: string; role: "admin"|"user" };
+type UserAuth = { _id: import("mongoose").Types.ObjectId; email: string; passwordHash: string; name?: string; role: "admin"|"user" };
 
-export const { auth, signIn, signOut, handlers: { GET, POST } } = NextAuth({
+export const { auth, signIn, signOut, handlers: { GET, POST } } = NextAuth(() => ({
+  secret: getAuthConfig().secret,
   ...authConfig,
   providers: [
     Credentials({
@@ -16,7 +18,7 @@ export const { auth, signIn, signOut, handlers: { GET, POST } } = NextAuth({
         const email = String(creds?.email || "").toLowerCase().trim();
         const password = String(creds?.password || "");
         await dbConnect();
-        const user = await User.findOne({ email }).lean<UserAuth | null>();
+        const user = await User.findOne({ email }).select("+passwordHash").lean<UserAuth | null>();
         if (!user) return null;
         const ok = await bcrypt.compare(password, user.passwordHash);
         if (!ok) return null;
@@ -24,4 +26,4 @@ export const { auth, signIn, signOut, handlers: { GET, POST } } = NextAuth({
       },
     }),
   ],
-});
+}));

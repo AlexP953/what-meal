@@ -1,11 +1,33 @@
 services:
-  whatmeal:
-    build: .
-    container_name: whatmeal
+  mongo:
+    image: mongo:8.0.38@sha256:479e85ced54ffb8a40dade1dcde2da2a9ae858515b9415e9cc54bfb8f0575d01
     ports:
-      - "3000:3000"
+      - "127.0.0.1:${MONGODB_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand({ping: 1}).ok ? 0 : 1)"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+  whatmeal:
+    profiles: ["app"]
+    build: .
+    ports:
+      - "127.0.0.1:3000:3000"
     env_file:
-      - .env
+      - path: .env.local
+        required: false
     environment:
       NODE_ENV: production
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB: ${MONGODB_DB:-whatmeal}
+      AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_NOTIFICATIONS_ENABLED: "false"
+    depends_on:
+      mongo:
+        condition: service_healthy
     restart: unless-stopped
+volumes:
+  mongo-data:

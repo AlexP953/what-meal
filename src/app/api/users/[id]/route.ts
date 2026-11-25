@@ -1,21 +1,20 @@
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
-import "@/app/models/Meal";
-import { User } from "@/app/models/User";
+import { serializeMeal, type MealRecord } from "@/server/persistence/meal";
+import { User, serializeUser, type UserRecord } from "@/server/persistence/user";
 import { requireSession, isAdmin, forbid } from "@/lib/authz";
 import { updateUserSchema } from "@/lib/validations";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { UserLean } from "../../../types";
 import { isValidObjectId } from "mongoose";
 
 const updateUserAdminSchema = updateUserSchema.extend({
   role: z.enum(["admin", "user"]).optional(),
 });
 
-export async function PATCH(req: Request, context: any) {
+export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await requireSession();
-  const { id } = (context as { params: { id: string } }).params;
+  const { id } = await context.params;
 
   if (error) return error;
 
@@ -32,12 +31,12 @@ export async function PATCH(req: Request, context: any) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
   }
-  const { email, name, password, role } = parsed.data as any;
+  const { email, name, password, role } = parsed.data as z.infer<typeof updateUserAdminSchema>;
 
   try {
     await dbConnect();
 
-    const update: Record<string, any> = {};
+    const update: Record<string, string> = {};
     if (email) update.email = email.toLowerCase().trim();
     if (name) update.name = name;
     if (password) update.passwordHash = await bcrypt.hash(password, 12);
@@ -56,11 +55,11 @@ export async function PATCH(req: Request, context: any) {
       id,
       { $set: update },
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
-        projection: { email: 1, name: 1, tz: 1, role: 1 },
+        projection: { email: 1, name: 1, role: 1, createdAt: 1, updatedAt: 1 },
       }
-    ).lean<UserLean | null>();
+    ).lean<UserRecord | null>();
 
     if (!user)
       return NextResponse.json(
@@ -68,23 +67,23 @@ export async function PATCH(req: Request, context: any) {
         { status: 404 }
       );
 
+    const publicUser = serializeUser(user);
     return NextResponse.json(
       {
-        id: user._id.toString(),
-        email: user.email,
-        name: user.name ?? null,
-        role: user.role,
+        id: publicUser.id,
+        email: publicUser.email,
+        name: publicUser.name ?? null,
+        role: publicUser.role,
       },
       { status: 200 }
     );
-  } catch (e) {
-    console.error(e);
+  } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
 
-export async function DELETE(req: Request, context: any) {
-  const { id } = (context as { params: { id: string } }).params;
+export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params;
 
   const { session, error } = await requireSession();
   if (error) return error;
@@ -104,17 +103,16 @@ export async function DELETE(req: Request, context: any) {
     }
 
     return NextResponse.json({ message: "Usuario eliminado" }, { status: 200 });
-  } catch (e) {
-    console.error(e);
+  } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
 
-export async function GET(req: Request, context: any) {
+export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await requireSession();
   if (error) return error;
 
-  const { id } = await (context as { params: Promise<{ id: string }> }).params;
+  const { id } = await context.params;
 
   const isSelf = session.user?.id === id;
   if (!isAdmin(session) && !isSelf) return forbid();
@@ -127,8 +125,8 @@ export async function GET(req: Request, context: any) {
     }
 
     const user = await User.findById(id)
-      .select("-passwordHash -__v")
-      .populate({
+      .select("-passwordHash -fcmToken -__v")
+      .populate<{ meals: MealRecord[] }>({
         path: "meals",
         options: { sort: { date: -1, createdAt: -1 } },
       });
@@ -137,9 +135,8 @@ export async function GET(req: Request, context: any) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ user }, { status: 200 });
-  } catch (e) {
-    console.error(e);
+    return NextResponse.json({ user: { ...serializeUser(user), meals: (user.meals ?? []).map(serializeMeal) } }, { status: 200 });
+  } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

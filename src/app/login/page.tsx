@@ -1,9 +1,12 @@
 "use client";
 
+import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -37,7 +40,8 @@ export default function LoginPage() {
     if (res?.error) {
       setError("Email o contraseña incorrectos");
     } else {
-      window.location.href = "/";
+      router.push("/");
+      router.refresh();
     }
   }
 
@@ -47,7 +51,7 @@ export default function LoginPage() {
         <div className="flex justify-center mb-6">
           <div className="text-5xl font-extrabold tracking-tight leading-none">
             <span className="align-middle">
-              <img src="/logo.svg" alt="WhatMeal" className="h-16 ml-8 w-auto" />
+              <Image width={160} height={64} src="/logo.svg" alt="WhatMeal" className="h-16 ml-8 w-auto" />
             </span>
           </div>
         </div>

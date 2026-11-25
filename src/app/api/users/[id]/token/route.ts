@@ -1,3 +1,5 @@
+import { notificationsEnabled } from "@/shared/config";
+import { notificationsDisabled } from "@/server/notifications/disabled";
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import { User } from "@/app/models/User";
@@ -7,6 +9,7 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!notificationsEnabled) return notificationsDisabled();
   const { id } = await params;
   const { token } = await req.json();
 
@@ -21,7 +24,7 @@ export async function POST(
   const user = await User.findByIdAndUpdate(
     objectId,
     { fcmToken: token },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   if (!user) {
@@ -31,13 +34,14 @@ export async function POST(
     );
   }
 
-  return NextResponse.json({ success: true, fcmToken: user.fcmToken });
+  return NextResponse.json({ success: true });
 }
 
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!notificationsEnabled) return notificationsDisabled();
   const { id } = await params;
   await dbConnect();
   const objectId = new mongoose.Types.ObjectId(id);
@@ -45,7 +49,7 @@ export async function DELETE(
   const user = await User.findByIdAndUpdate(
     objectId,
     { fcmToken: null },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   if (!user) {
@@ -55,5 +59,5 @@ export async function DELETE(
     );
   }
 
-  return NextResponse.json({ success: true, fcmToken: null });
+  return NextResponse.json({ success: true });
 }

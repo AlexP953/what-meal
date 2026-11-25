@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MealLean } from "../types";
 import { TrashIcon } from "@heroicons/react/24/outline";
 
-type Reaction = "good" | "neutral" | "bad";
-type MealType = "breakfast" | "lunch" | "dinner" | "snack";
+import type { MealReaction as Reaction, MealType } from "@/shared/meal";
 
 export default function EditMealModal({
   open,
@@ -69,7 +68,7 @@ export default function EditMealModal({
       });
 
       const raw = await res.text();
-      let json: any = null;
+      let json: { error?: string; message?: string; meal?: Partial<MealLean> } | null = null;
       try {
         json = raw ? JSON.parse(raw) : null;
       } catch {
@@ -95,8 +94,8 @@ export default function EditMealModal({
 
       onUpdated(updated);
       onClose();
-    } catch (err: any) {
-      setError(err?.message || "No se pudo actualizar el meal");
+    } catch (err) {
+      setError((err instanceof Error ? err.message : "") || "No se pudo actualizar el meal");
       console.error("Update meal error:", err);
     } finally {
       setSubmitting(false);
@@ -114,8 +113,8 @@ export default function EditMealModal({
       if (!res.ok) throw new Error(text || "Error eliminando meal");
       onDeleted(meal._id);
       onClose();
-    } catch (err: any) {
-      setError(err?.message || "No se pudo eliminar el meal");
+    } catch (err) {
+      setError((err instanceof Error ? err.message : "") || "No se pudo eliminar el meal");
       console.error("Delete meal error:", err);
     } finally {
       setSubmitting(false);

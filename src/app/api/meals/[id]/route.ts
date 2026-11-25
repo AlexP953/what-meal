@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
-import { Meal } from "@/app/models/Meal";
+import { Meal, serializeMeal } from "@/server/persistence/meal";
 import { requireSession, isAdmin, forbid } from "@/lib/authz";
 import { updateMealSchema } from "@/lib/validations";
-import { MealLean } from "../../../types";
 import { isValidObjectId } from "mongoose";
 
 const ALLOWED_FIELDS = new Set([
@@ -15,11 +14,11 @@ const ALLOWED_FIELDS = new Set([
   "notes",
 ]);
 
-export async function PATCH(req: Request, context: any) {
+export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await requireSession();
   if (error) return error;
 
-  const { id } = (context as { params: { id: string } }).params;
+  const { id } = await context.params;
 
   if (!isValidObjectId(id)) {
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
@@ -56,36 +55,38 @@ export async function PATCH(req: Request, context: any) {
   const updated = await Meal.findByIdAndUpdate(
     id,
     { $set: parsed.data },
-    { new: true, runValidators: true }
-  ).lean<MealLean>();
+    { returnDocument: "after", runValidators: true }
+  ).lean();
 
   if (!updated) {
     return NextResponse.json({ error: "Meal not found" }, { status: 404 });
   }
 
+  const publicMeal = serializeMeal(updated);
   return NextResponse.json(
     {
       meal: {
-        id: updated._id.toString(),
-        name: updated.name,
-        date: updated.date,
-        type: updated.type,
-        reaction: updated.reaction,
-        place: updated.place ?? null,
-        notes: updated.notes ?? null,
-        userId: updated.userId?.toString() ?? null,
+        id: publicMeal._id.toString(),
+        name: publicMeal.name,
+        date: publicMeal.date,
+        type: publicMeal.type,
+        reaction: publicMeal.reaction,
+        place: publicMeal.place ?? null,
+        notes: publicMeal.notes ?? null,
+        userId: publicMeal.userId?.toString() ?? null,
       },
     },
     { status: 200 }
   );
 }
 
-export async function DELETE(req: Request, context: any) {
-  const { id } = (context as { params: { id: string } }).params;
+export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params;
 
   const { session, error } = await requireSession();
   if (error) return error;
 
+  await dbConnect();
   const existing = await Meal.findById(id);
 
   if (!existing) {
@@ -98,7 +99,6 @@ export async function DELETE(req: Request, context: any) {
   }
 
   try {
-    await dbConnect();
 
     const deleted = await Meal.findByIdAndDelete(id).lean();
 
@@ -110,17 +110,16 @@ export async function DELETE(req: Request, context: any) {
     }
 
     return NextResponse.json({ message: "Meal eliminado" }, { status: 200 });
-  } catch (e) {
-    console.error(e);
+  } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
 
-export async function GET(req: Request, context: any) {
+export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   const { session, error } = await requireSession();
   if (error) return error;
 
-  const { id } = (context as { params: { id: string } }).params;
+  const { id } = await context.params;
 
   try {
     await dbConnect();
@@ -139,9 +138,8 @@ export async function GET(req: Request, context: any) {
 
     if (!isAdmin(session) && !isSelf) return forbid();
 
-    return NextResponse.json({ meal }, { status: 200 });
-  } catch (e) {
-    console.error(e);
+    return NextResponse.json({ meal: serializeMeal(meal) }, { status: 200 });
+  } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

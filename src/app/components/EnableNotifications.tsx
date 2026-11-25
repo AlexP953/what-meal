@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { messaging, getToken, onMessage } from "@/lib/firebase";
+import { getClientMessaging } from "@/lib/firebase";
+import { notificationsEnabled } from "@/shared/config";
 
 export default function EnableNotifications({
   onDone,
@@ -12,13 +13,15 @@ export default function EnableNotifications({
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const userId = session?.user?.id;
+
   // 🔹 Verifica si el usuario ya tiene token guardado
   useEffect(() => {
-    if (status !== "authenticated" || !session?.user?.id) return;
+    if (!notificationsEnabled || status !== "authenticated" || !userId) return;
 
     async function checkToken() {
       try {
-        const res = await fetch(`/api/users/${session!.user!.id}`);
+        const res = await fetch(`/api/users/${userId}`);
         const data = await res.json();
         const tokens = data?.user?.fcmTokens || data?.user?.fcmToken;
         if (tokens && (Array.isArray(tokens) ? tokens.length > 0 : true)) {
@@ -32,13 +35,17 @@ export default function EnableNotifications({
     }
 
     checkToken();
-  }, [session?.user?.id, status]);
+  }, [userId, status]);
 
   // 🔹 Activar notificaciones
   async function enablePush() {
+    if (!notificationsEnabled) return;
     try {
       setLoading(true);
 
+      const client = await getClientMessaging();
+      if (!client) return;
+      const { messaging, getToken, onMessage } = client;
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
         return;
@@ -82,9 +89,10 @@ export default function EnableNotifications({
   }
 
   async function disablePush() {
+    if (!notificationsEnabled) return;
     try {
       setLoading(true);
-      if (!session?.user?.id) return;
+      if (!userId) return;
 
       await fetch(`/api/users/${session!.user!.id}/token`, {
         method: "DELETE",
@@ -105,7 +113,8 @@ export default function EnableNotifications({
 
       <button
         onClick={enabled ? disablePush : enablePush}
-        disabled={loading}
+        aria-label="Notificaciones"
+        disabled={!notificationsEnabled || loading}
         className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
           enabled ? "bg-green-600" : "bg-gray-300"
         }`}
