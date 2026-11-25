@@ -95,16 +95,18 @@ export default function EditMealModal({
     if (!meal) return;
     if (!confirm("¿Seguro que quieres eliminar este meal?")) return;
 
+    setError("");
     setSubmitting(true);
     try {
       const res = await fetch(`/api/meals/${meal._id}`, { method: "DELETE" });
-      const text = await res.text();
-      if (!res.ok) throw new Error(text || "Error eliminando meal");
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        throw new Error(json?.error || "No se pudo eliminar la comida");
+      }
       onDeleted(meal._id);
       onClose();
     } catch (err) {
       setError((err instanceof Error ? err.message : "") || "No se pudo eliminar el meal");
-      console.error("Delete meal error:", err);
     } finally {
       setSubmitting(false);
     }

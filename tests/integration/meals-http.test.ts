@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { encode } from "next-auth/jwt";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { Types } from "mongoose";
 import { User } from "@/server/persistence/user";
@@ -8,6 +10,8 @@ import { isolatedDatabase } from "../helpers/database";
 const database = isolatedDatabase();
 const workspace = isolatedTestApp();
 const collection = "/api/meals";
+const secret = randomBytes(32).toString("hex");
+let baseUrl: string;
 const password = "initial-password-12";
 const dish = { name: "Soup", date: "2024-02-29", type: "lunch", reaction: "good", place: "Home", notes: "Warm" };
 type Client = ReturnType<typeof authClient>;
@@ -37,7 +41,7 @@ async function createMeal(client: Client = owner, fields: Record<string, unknown
 beforeAll(async () => {
   database.configure();
   await prepareDatabase();
-  const { baseUrl } = await workspace.start();
+  ({ baseUrl } = await workspace.start("dev", { AUTH_SECRET: secret }));
   anonymous = authClient(baseUrl);
   async function register(name: string) {
     const email = name + "@example.com";
@@ -100,4 +104,54 @@ it("updates only supplied fields, retaining ownership and allowing empty text", 
   const ownedEdit = await owner.request(path, jsonRequest("PATCH", { name: "Salad" }));
   expect(ownedEdit.status).toBe(200);
   expect((await ownedEdit.json()).meal).toMatchObject({ name: "Salad", date: "2028-02-29", userId: ownerId });
+});
+
+it("deletes only after session, origin, id and owner checks", async () => {
+  const { id } = await createMeal();
+  const path = collection + "/" + id;
+  const remove = { method: "DELETE" };
+  await expectError(await owner.request(path, { ...remove, headers: { "sec-fetch-site": "cross-site" } }), 403, "FORBIDDEN_ORIGIN");
+  await expectError(await other.request(path, remove), 403, "FORBIDDEN");
+  await expectError(await owner.request(collection + "/invalid", remove), 400, "INVALID_INPUT");
+  expect((await owner.request(path)).status).toBe(200);
+  const deleted = await admin.request(path, remove);
+  expect(deleted.status).toBe(200);
+  expect(await deleted.json()).toEqual({ message: expect.any(String) });
+  await expectError(await owner.request(path), 404, "MEAL_NOT_FOUND");
+  await expectError(await owner.request(path, remove), 404, "MEAL_NOT_FOUND");
+  const second = await createMeal();
+  expect((await owner.request(collection + "/" + second.id, remove)).status).toBe(200);
+});
+
+it("rejects all routes for absent, expired, revoked and removed sessions", async () => {
+  const email = "session-state@example.com";
+  const registration = await anonymous.request("/api/users", jsonRequest("POST", { email, password }));
+  expect(registration.status).toBe(201);
+  const { id } = await registration.json();
+  const client = authClient(baseUrl);
+  expect((await client.signIn(email, password)).status).toBe(200);
+  const created = await createMeal(client);
+  const path = collection + "/" + created.id;
+  const requests = [
+    [collection, {}],
+    [collection, jsonRequest("POST", dish)],
+    [path, {}],
+    [path, jsonRequest("PATCH", { name: "Salad" })],
+    [path, { method: "DELETE" }],
+  ] as const;
+  const cookieName = "authjs.session-token";
+  const token = await encode({
+    salt: cookieName, secret,
+    token: { uid: id, authVersion: 0, signedInAt: Date.now() - 25 * 60 * 60 * 1000 },
+  });
+  for (const [route, options] of requests) {
+    await expectError(await anonymous.request(route, options), 401, "UNAUTHORIZED");
+    await expectError(await fetch(baseUrl + route, { ...options, headers: { ...("headers" in options ? options.headers : {}), cookie: cookieName + "=" + token } }), 401, "UNAUTHORIZED");
+  }
+  await User.updateOne({ _id: id }, { $inc: { authVersion: 1 } });
+  for (const [route, options] of requests) await expectError(await client.request(route, options), 401, "UNAUTHORIZED");
+  expect((await client.signIn(email, password)).status).toBe(200);
+  expect((await client.request(path)).status).toBe(200);
+  await User.deleteOne({ _id: id });
+  for (const [route, options] of requests) await expectError(await client.request(route, options), 401, "UNAUTHORIZED");
 });

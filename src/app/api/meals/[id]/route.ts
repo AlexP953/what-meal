@@ -60,37 +60,22 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
 }
 
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
-  const { id } = await context.params;
-
-  const { session, error } = await requireSession();
-  if (error) return error;
-
-  await dbConnect();
-  const existing = await Meal.findById(id);
-
-  if (!existing) {
-    return NextResponse.json({ error: "Meal not found" }, { status: 404 });
-  }
-
-  const isSelf = session.user?.id === existing.userId?.toString();
-  if (!isAdmin(session) && !isSelf) {
-    return forbid();
-  }
-
   try {
+    const { session, error } = await requireSession();
+    if (error) return error;
+    const originError = checkMutationOrigin(req);
+    if (originError) return originError;
 
-    const deleted = await Meal.findByIdAndDelete(id).lean();
+    const { id } = await context.params;
+    const result = await accessibleMeal(id, session);
+    if (result.error) return result.error;
 
-    if (!deleted) {
-      return NextResponse.json(
-        { error: "Meal no encontrado" },
-        { status: 404 }
-      );
-    }
+    const { deletedCount } = await Meal.deleteOne({ _id: id, userId: result.meal.userId });
+    if (!deletedCount) return mealNotFound();
 
-    return NextResponse.json({ message: "Meal eliminado" }, { status: 200 });
-  } catch {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ message: "Meal eliminado" });
+  } catch (error) {
+    return dataError(error);
   }
 }
 
