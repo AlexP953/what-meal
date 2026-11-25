@@ -18,6 +18,10 @@ import EnableNotifications from "../components/EnableNotifications";
 
 export default function MealsPage() {
   const { data: session, status } = useSession();
+  const [sessionChanged, setSessionChanged] = useState(false);
+  useEffect(() => watchSessionChange(() => setSessionChanged(true)), []);
+
+  if (sessionChanged) return <SessionLost />;
   if (status === "loading") return <main className="app-surface p-6"><p role="status">Comprobando sesión…</p></main>;
   const userId = session?.user?.id;
   if (status !== "authenticated" || !userId) return <SessionLost />;
@@ -78,8 +82,6 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
     setMealForm(undefined);
     setFiltersOpen(false);
   }, []);
-
-  useEffect(() => watchSessionChange(expireSession), [expireSession]);
 
   async function closeSession() {
     if (signOutPending.current) return;
