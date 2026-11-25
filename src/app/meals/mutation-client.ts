@@ -20,7 +20,7 @@ type MutationResult =
   | { status: "rejected"; error: string }
   | { status: "session-lost" | "uncertain" | "aborted" };
 
-function isMealFields(value: Partial<MealFields>) {
+function isMealFields(value: Partial<Omit<MealFields, "place" | "notes"> & { place: string | null; notes: string | null }>) {
   return typeof value.name === "string" && Boolean(value.name.trim()) &&
     typeof value.date === "string" && isCivilDate(value.date) &&
     value.type !== undefined && mealTypes.includes(value.type) &&
@@ -55,7 +55,10 @@ export async function mutateMeal(operation: MealOperation, userId: string, signa
     };
 
     if (operation.method === "DELETE") {
-      return response.ok ? { status: "confirmed", change: { id: operation.meal.id } } : { status: "uncertain" };
+      if (response.status !== 200 || typeof body?.message !== "string" || !body.message.trim()) {
+        return { status: "uncertain" };
+      }
+      return { status: "confirmed", change: { id: operation.meal.id } };
     }
     if (operation.method === "PATCH") {
       const updated = body?.meal;

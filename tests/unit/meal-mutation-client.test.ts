@@ -55,3 +55,15 @@ it("validates edited meal identity and retains its original creation timestamp",
   });
   expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({ place: "", notes: "" });
 });
+
+it("confirms deletion only after receiving the expected successful response", async () => {
+  const fetcher = vi.fn()
+    .mockResolvedValueOnce(Response.json({}))
+    .mockResolvedValueOnce(Response.json({ message: "Meal eliminado" }));
+  vi.stubGlobal("fetch", fetcher);
+  const operation = { method: "DELETE", meal: { ...meal, type: "lunch", reaction: "good" } } as const;
+  const { signal } = new AbortController();
+  await expect(mutateMeal(operation, meal.user, signal)).resolves.toEqual({ status: "uncertain" });
+  await expect(mutateMeal(operation, meal.user, signal)).resolves.toEqual({ status: "confirmed", change: { id: meal.id } });
+  expect(fetcher.mock.calls[0][1]).toMatchObject({ method: "DELETE", headers: { "X-Expected-Account": meal.user } });
+});

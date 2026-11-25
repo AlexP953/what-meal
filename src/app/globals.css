@@ -243,3 +243,12 @@ body {
   background: #215337;
   color: white;
 }
+
+.app-button-danger {
+  border-color: transparent;
+  background: #852b21;
+  color: white;
+}
+
+.app-button-danger:not(:disabled):hover { background: #632016; }
+.app-danger-link { color: #852b21; }
