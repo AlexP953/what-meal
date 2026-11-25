@@ -7,3 +7,7 @@ node_modules
 *.tsbuildinfo
 coverage
 .deploy-secrets
+**/auth-secret
+**/mongo-root-password
+**/mongo-app-password
+**/mongo-backup-password

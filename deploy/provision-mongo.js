@@ -5,7 +5,7 @@ const { readFileSync } = require("node:fs");
 
 function readPassword(name) {
   const value = readFileSync(`/run/secrets/${name}`, "utf8").replace(/\n+$/, "");
-  if (!/^[a-f0-9]{64}$/.test(value) || new Set(value).size < 12) {
+  if (!/^[a-f0-9]{64}$/.test(value) || new Set(value).size < 12 || value.slice(0, 32) === value.slice(32)) {
     throw new Error("Invalid deployment password");
   }
   return value;

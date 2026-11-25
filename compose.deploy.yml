@@ -2,6 +2,16 @@ name: whatmeal-deploy
 
 x-mongo-image: &mongo-image mongo:8.0.38@sha256:479e85ced54ffb8a40dade1dcde2da2a9ae858515b9415e9cc54bfb8f0575d01
 
+x-whatmeal-runtime: &whatmeal-runtime
+  environment:
+    AUTH_URL: ${AUTH_URL:?Set AUTH_URL to your HTTPS origin}
+    NODE_ENV: production
+    NEXT_PUBLIC_NOTIFICATIONS_ENABLED: "false"
+  secrets:
+    - mongo_app_password
+    - auth_secret
+  networks: [database]
+
 services:
   mongo:
     image: *mongo-image
@@ -37,7 +47,34 @@ services:
       mongo:
         condition: service_healthy
 
+  db-prepare:
+    <<: *whatmeal-runtime
+    build:
+      context: .
+      target: db-prepare
+    depends_on:
+      mongo-provision:
+        condition: service_completed_successfully
+
+  whatmeal:
+    <<: *whatmeal-runtime
+    build:
+      context: .
+      target: runner
+    depends_on:
+      db-prepare:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r => process.exit(r.status === 200 ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
 secrets:
+  auth_secret:
+    file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/auth-secret
   mongo_root_password:
     file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/mongo-root-password
   mongo_app_password:
