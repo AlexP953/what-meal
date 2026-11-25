@@ -1,10 +1,10 @@
-import { useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 
-export default function DiaryDialog({ titleId, onClose, submitting, fallbackFocus, children }: {
+export default function DiaryDialog({ titleId, onClose, submitting, getFallbackFocus, children }: {
   titleId: string;
   onClose: () => void;
   submitting?: boolean;
-  fallbackFocus?: RefObject<HTMLButtonElement | null>;
+  getFallbackFocus: () => HTMLElement | null;
   children: ReactNode;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -12,39 +12,44 @@ export default function DiaryDialog({ titleId, onClose, submitting, fallbackFocu
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    const opener = document.activeElement;
-    const alternate = fallbackFocus?.current;
     const previousOverflow = document.body.style.overflow;
     dialog.showModal();
     document.body.style.overflow = "hidden";
     return () => {
       dialog.close();
       document.body.style.overflow = previousOverflow;
-      if (alternate) queueMicrotask(() => {
-        if (alternate.isConnected && !opener?.isConnected && document.activeElement === document.body) {
-          alternate.focus();
-        }
+      queueMicrotask(() => {
+        // The browser restores a connected opener. Resolve the fallback after the DOM update.
+        const active = document.activeElement;
+        if (dialog.open || (active?.isConnected && active !== document.body && active !== document.documentElement)) return;
+        const fallback = getFallbackFocus();
+        if (fallback?.isConnected) fallback.focus();
       });
     };
-  }, [fallbackFocus]);
+  }, [getFallbackFocus]);
 
   return (
     <dialog
       ref={dialogRef}
       aria-labelledby={titleId}
+      onKeyDown={event => {
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        event.preventDefault();
+        if (!submitting) onClose();
+      }}
       onCancel={event => {
         event.preventDefault();
         if (!submitting) onClose();
       }}
-      className="fixed inset-0 m-0 h-full max-h-none w-full max-w-none border-0 bg-transparent p-0 backdrop:bg-black/40"
+      className="diary-dialog"
     >
       <div
-        className="flex min-h-full items-end justify-center sm:items-center"
+        className="diary-dialog-frame"
         onClick={event => {
           if (event.target === event.currentTarget && !submitting) onClose();
         }}
       >
-        <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 shadow-xl mx-0 sm:mx-4">
+        <div className="diary-dialog-panel">
           {children}
         </div>
       </div>

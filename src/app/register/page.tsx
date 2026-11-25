@@ -1,49 +1,64 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import AccessScreen from "../components/AccessScreen";
 import { useHydrated } from "../use-hydrated";
 import { submitRegistration } from "./submit";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const hydrated = useHydrated();
   const submitting = useRef(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [failure, setFailure] = useState<Extract<Awaited<ReturnType<typeof submitRegistration>>, { ok: false }>>();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current) return;
     submitting.current = true;
     setLoading(true);
-    setError("");
-    try {
-      const result = await submitRegistration(new FormData(event.currentTarget));
-      if (result.ok) router.push("/login?registered=1");
-      else setError(result.error);
-    } finally {
-      submitting.current = false;
-      setLoading(false);
+    setFailure(undefined);
+
+    const result = await submitRegistration(new FormData(event.currentTarget));
+    if (result.ok) {
+      window.location.replace("/login?registered=1");
+      return;
     }
+
+    setFailure(result);
+    submitting.current = false;
+    setLoading(false);
   }
 
-  const inputClass = "mt-1 w-full rounded-xl border px-3 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-600";
   return (
-    <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <section className="w-full max-w-sm rounded-2xl bg-white border shadow-sm p-8 text-gray-900">
-        <h1 className="text-center text-2xl font-bold">Crear cuenta</h1>
-        <form method="post" onSubmit={handleSubmit} className="mt-6 space-y-4" aria-busy={loading} aria-describedby={error ? "registration-error" : undefined}>
-          <div><label htmlFor="name">Nombre (opcional)</label><input id="name" name="name" autoComplete="name" maxLength={100} className={inputClass} /></div>
-          <div><label htmlFor="email">Correo electrónico</label><input id="email" name="email" type="email" autoComplete="email" required className={inputClass} /></div>
-          <div><label htmlFor="password">Contraseña</label><input id="password" name="password" type="password" autoComplete="new-password" required minLength={12} aria-describedby="password-help" className={inputClass} />
-            <p id="password-help" className="mt-2 text-sm text-gray-600">Al menos 12 caracteres y máximo 72 bytes UTF-8. Las letras acentuadas y los emojis ocupan varios bytes.</p></div>
-          {error && <p id="registration-error" role="alert" className="text-sm text-red-700">{error}</p>}
-          <button type="submit" disabled={!hydrated || loading} className="w-full rounded-xl bg-green-700 py-3 text-white font-semibold hover:bg-green-800 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50">{loading ? "Creando cuenta…" : "Crear cuenta"}</button>
-        </form>
-        <p className="mt-5 text-center text-sm"><Link href="/login" className="text-green-800 underline">Ya tengo cuenta. Iniciar sesión</Link></p>
-      </section>
-    </main>
+    <AccessScreen title="Crear una cuenta" description="Registra tus comidas y cómo te sientan.">
+      <form method="post" onSubmit={handleSubmit} className="app-form" aria-busy={loading} aria-describedby={failure ? "registration-error" : undefined}>
+        <label htmlFor="name">
+          Nombre <span className="app-muted font-normal">(opcional)</span>
+          <input id="name" name="name" autoComplete="name" maxLength={100} readOnly={loading} className="app-field" />
+        </label>
+        <label htmlFor="email">
+          Correo electrónico
+          <input id="email" name="email" type="email" autoComplete="email" aria-invalid={failure?.duplicate} aria-describedby={failure?.duplicate ? "registration-error" : undefined} readOnly={loading} className="app-field" required />
+        </label>
+        <div>
+          <label htmlFor="password">Contraseña</label>
+          <input
+            id="password" name="password" type="password" autoComplete="new-password" minLength={12} required readOnly={loading} className="app-field"
+            aria-invalid={failure?.field === "password"}
+            aria-describedby={failure?.field === "password" ? "password-help registration-error" : "password-help"}
+          />
+          <p id="password-help" className="app-muted mt-2 text-sm">
+            Al menos 12 caracteres y máximo 72 bytes UTF-8. Las letras acentuadas y los emojis ocupan varios bytes.
+          </p>
+        </div>
+        <button type="submit" disabled={!hydrated || loading} className="app-button app-button-primary">
+          {loading ? "Creando cuenta…" : "Crear cuenta"}
+        </button>
+      </form>
+      <p role="status" className="sr-only">{loading ? "Creando cuenta…" : ""}</p>
+      {failure && <p id="registration-error" role="alert" className="app-feedback app-error mt-3">{failure.error}</p>}
+      <p className="mt-3 text-sm"><Link href="/login" className="app-link">Iniciar sesión</Link></p>
+    </AccessScreen>
   );
 }

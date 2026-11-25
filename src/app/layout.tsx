@@ -1,7 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import AuthProvider from "./SessionProvider"; 
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,6 +17,11 @@ export const metadata: Metadata = {
   description: "App para registrar comidas y síntomas",
 };
 
+export const viewport: Viewport = {
+  interactiveWidget: "resizes-content",
+  themeColor: "#f4f5ed",
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -28,7 +32,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>{children}</AuthProvider>
+        {children}
       </body>
     </html>
   );

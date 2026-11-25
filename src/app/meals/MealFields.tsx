@@ -1,0 +1,48 @@
+import { mealReactions, mealTypes } from "@/shared/meal";
+import type { MealFieldValues } from "./mutation-client";
+import type { DiaryMeal } from "./diary-client";
+import { reactionLabels, typeLabels } from "./labels";
+
+export default function MealFields({ meal, values, nameInvalid, dateInvalid }: { meal?: DiaryMeal; values?: MealFieldValues; nameInvalid: boolean; dateInvalid: boolean }) {
+  return (
+    <>
+      <label htmlFor="meal-name">
+        Nombre
+        <input id="meal-name" name="name" defaultValue={values?.name ?? meal?.name} className="app-field" required
+          aria-invalid={nameInvalid} aria-describedby={nameInvalid ? "meal-form-error" : undefined} />
+      </label>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label htmlFor="meal-date" className="min-w-0">
+          Fecha
+          <input type="date" id="meal-date" name="date" defaultValue={values?.date ?? meal?.date} className="app-field" required
+            aria-invalid={dateInvalid} aria-describedby={dateInvalid ? "meal-form-error" : undefined} />
+        </label>
+
+        <label htmlFor="meal-type">
+          Tipo
+          <select id="meal-type" name="type" defaultValue={values?.type ?? meal?.type ?? "dinner"} className="app-field" required>
+            {mealTypes.map(type => <option key={type} value={type}>{typeLabels[type]}</option>)}
+          </select>
+        </label>
+      </div>
+
+      <label htmlFor="meal-reaction">
+        Reacción
+        <select id="meal-reaction" name="reaction" defaultValue={values?.reaction ?? meal?.reaction ?? "neutral"} className="app-field" required>
+          {mealReactions.map(reaction => <option key={reaction} value={reaction}>{reactionLabels[reaction]}</option>)}
+        </select>
+      </label>
+
+      <label htmlFor="meal-place">
+        Lugar <span className="app-muted font-normal">(opcional)</span>
+        <input id="meal-place" name="place" defaultValue={values?.place ?? meal?.place ?? ""} className="app-field" />
+      </label>
+
+      <label htmlFor="meal-notes">
+        Notas <span className="app-muted font-normal">(opcional)</span>
+        <textarea id="meal-notes" name="notes" defaultValue={values?.notes ?? meal?.notes ?? ""} rows={3} className="app-field" />
+      </label>
+    </>
+  );
+}

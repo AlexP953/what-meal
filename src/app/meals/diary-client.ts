@@ -17,6 +17,10 @@ export function diarySearch({ type, reactions, dateFrom, dateTo, sortDir }: Diar
   return search;
 }
 
+export function hasDiaryFilters({ type, reactions, dateFrom, dateTo }: DiaryFilters) {
+  return Boolean(type || reactions.length || dateFrom || dateTo);
+}
+
 export const defaultDiaryFilters: DiaryFilters = {
   type: "", reactions: [], dateFrom: "", dateTo: "", sortDir: "desc",
 };
