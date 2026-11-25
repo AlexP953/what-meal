@@ -28,7 +28,10 @@ npm run dev -- --hostname 127.0.0.1
 
 Abre `http://localhost:3000/login`. La pantalla de acceso debe aparecer sin
 configurar Firebase ni solicitar permisos de notificaciones. La base nueva no
-contiene cuentas. Detén desarrollo con Ctrl+C antes de continuar:
+contiene cuentas. Abre `/register` para crear una cuenta normal con correo,
+contraseña de al menos doce caracteres (máximo 72 bytes UTF-8) y nombre opcional.
+El registro confirma la creación en `/login`, sin iniciar sesión automáticamente.
+Detén desarrollo con Ctrl+C antes de continuar:
 
 ```bash
 docker compose stop mongo
