@@ -6,9 +6,10 @@ import DiaryDialog from "./DiaryDialog";
 import { dateRangeError, defaultDiaryFilters, type DiaryFilters } from "./diary-client";
 import { reactionLabels, typeLabels } from "./labels";
 
-export default function DiaryFiltersDialog({ filters, captureRef, onClose, onApply }: {
+export default function DiaryFiltersDialog({ filters, captureRef, getFallbackFocus, onClose, onApply }: {
   filters: DiaryFilters;
   captureRef: RefObject<(() => DiaryDraft) | null>;
+  getFallbackFocus: () => HTMLElement | null;
   onClose: () => void;
   onApply: (filters: DiaryFilters) => void;
 }) {
@@ -21,7 +22,7 @@ export default function DiaryFiltersDialog({ filters, captureRef, onClose, onApp
   const rangeError = dateRangeError(draft.dateFrom, draft.dateTo);
 
   return (
-    <DiaryDialog titleId="diary-filter-title" onClose={onClose}>
+    <DiaryDialog titleId="diary-filter-title" onClose={onClose} getFallbackFocus={getFallbackFocus}>
       <header className="dialog-header">
         <h2 id="diary-filter-title">Filtros</h2>
         <button type="button" className="app-button dialog-icon" aria-label="Cerrar" onClick={onClose}>

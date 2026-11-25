@@ -1,10 +1,10 @@
-import { useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 
-export default function DiaryDialog({ titleId, onClose, submitting, fallbackFocus, children }: {
+export default function DiaryDialog({ titleId, onClose, submitting, getFallbackFocus, children }: {
   titleId: string;
   onClose: () => void;
   submitting?: boolean;
-  fallbackFocus?: RefObject<HTMLButtonElement | null>;
+  getFallbackFocus: () => HTMLElement | null;
   children: ReactNode;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -12,21 +12,21 @@ export default function DiaryDialog({ titleId, onClose, submitting, fallbackFocu
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    const opener = document.activeElement;
-    const alternate = fallbackFocus?.current;
     const previousOverflow = document.body.style.overflow;
     dialog.showModal();
     document.body.style.overflow = "hidden";
     return () => {
       dialog.close();
       document.body.style.overflow = previousOverflow;
-      if (alternate) queueMicrotask(() => {
-        if (alternate.isConnected && !opener?.isConnected && document.activeElement === document.body) {
-          alternate.focus();
-        }
+      queueMicrotask(() => {
+        // The browser restores a connected opener. Resolve the fallback after the DOM update.
+        const active = document.activeElement;
+        if (dialog.open || (active?.isConnected && active !== document.body && active !== document.documentElement)) return;
+        const fallback = getFallbackFocus();
+        if (fallback?.isConnected) fallback.focus();
       });
     };
-  }, [fallbackFocus]);
+  }, [getFallbackFocus]);
 
   return (
     <dialog

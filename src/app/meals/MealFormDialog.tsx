@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { flushSync } from "react-dom";
 import { isCivilDate } from "@/shared/meal";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import DiaryDialog from "./DiaryDialog";
@@ -13,13 +14,13 @@ import useMealMutation from "./useMealMutation";
 const missingName = "Escribe el nombre de la comida.";
 const invalidDate = "Introduce una fecha válida con un año de cuatro cifras.";
 
-export default function MealFormDialog({ meal, initialDraft, captureRef, onClose, onConfirmed, fallbackFocus, onCheckDiary, onSessionLost, onStart, userId }: {
+export default function MealFormDialog({ meal, initialDraft, captureRef, onClose, onConfirmed, getFallbackFocus, onCheckDiary, onSessionLost, onStart, userId }: {
   meal?: DiaryMeal;
   initialDraft?: MealDraft;
   captureRef: RefObject<(() => DiaryDraft) | null>;
   onClose: () => void;
   onConfirmed: (change: DiaryChange, message: string) => void;
-  fallbackFocus: RefObject<HTMLButtonElement | null>;
+  getFallbackFocus: () => HTMLElement | null;
   onCheckDiary: () => void;
   onSessionLost: () => void;
   onStart: () => void;
@@ -33,8 +34,11 @@ export default function MealFormDialog({ meal, initialDraft, captureRef, onClose
   const { submit, submitting, error, setError, uncertain, pending, uncertainRef } = useMealMutation(userId, change => {
     const message = "id" in change ? "Comida eliminada." : meal ? "Cambios guardados." : "Comida añadida.";
     captureRef.current = null;
-    onConfirmed(change, message);
-    onClose();
+    // A session change can snapshot the diary as soon as this response settles.
+    flushSync(() => {
+      onConfirmed(change, message);
+      onClose();
+    });
   }, () => {
     captureRef.current = null;
     onSessionLost();
@@ -76,7 +80,7 @@ export default function MealFormDialog({ meal, initialDraft, captureRef, onClose
       : "No pudimos confirmar el alta. Consulta el diario para comprobar si ya se añadió la comida antes de repetirla.";
 
   return (
-    <DiaryDialog titleId="meal-dialog-title" onClose={close} submitting={submitting} fallbackFocus={fallbackFocus}>
+    <DiaryDialog titleId="meal-dialog-title" onClose={close} submitting={submitting} getFallbackFocus={getFallbackFocus}>
       <header className="dialog-header">
         <h2 id="meal-dialog-title">{title}</h2>
         <button type="button" className="app-button dialog-icon" aria-label="Cerrar" onClick={close} disabled={submitting}>

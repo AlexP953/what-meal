@@ -18,12 +18,20 @@ import AccessScreen from "../components/AccessScreen";
 import { notificationsEnabled } from "@/shared/config";
 import EnableNotifications from "../components/EnableNotifications";
 
-type SessionDraft = { session: VerifiedSession; draft?: DiaryDraft };
+type DiaryConfirmation = { id: number; message: string };
+type DiaryResume = {
+  diary?: DiarySnapshot;
+  requestedFilters: DiaryFilters;
+  confirmation?: DiaryConfirmation;
+  reviewingMutation: boolean;
+  draft?: DiaryDraft;
+};
+type SessionDiary = { session: VerifiedSession; resume: DiaryResume };
 
 export default function MealsPage() {
-  const [{ session, draft }, setView] = useState<{ session?: SessionCheck; draft?: DiaryDraft }>({});
-  const committedView = useRef<(() => SessionDraft) | null>(null);
-  const saved = useRef<SessionDraft>(undefined);
+  const [{ session, resume }, setView] = useState<{ session?: SessionCheck; resume?: DiaryResume }>({});
+  const committedView = useRef<(() => SessionDiary) | null>(null);
+  const saved = useRef<SessionDiary>(undefined);
   const seenAuthAttempts = useRef(new Set<string>());
   const [attempt, setAttempt] = useState(0);
   const releaseDiary = useRef<() => void>(undefined);
@@ -43,11 +51,16 @@ export default function MealsPage() {
       const result = await readSession(signal);
       checking = false;
       if (signal.aborted) return;
+      if (result.status === "unavailable") {
+        saved.current = committedView.current?.() ?? saved.current;
+        flushSync(() => setView({ session: result }));
+        return;
+      }
 
       const previous = saved.current;
       if (result.status === "verified" && previous) {
         if (sameSession(previous.session, result)) {
-          flushSync(() => setView({ session: result, draft: previous.draft }));
+          flushSync(() => setView({ session: result, resume: previous.resume }));
         } else {
           setView({ session: { status: "absent" } });
           lifetime.abort();
@@ -55,7 +68,7 @@ export default function MealsPage() {
       } else {
         setView({ session: result });
       }
-      if (result.status !== "unavailable") saved.current = undefined;
+      saved.current = undefined;
     }
 
     function hide() {
@@ -131,7 +144,7 @@ export default function MealsPage() {
   return <AccountMeals
     key={`${session.userId}:${session.expiresAt}`}
     session={session}
-    initialDraft={draft}
+    resume={resume}
     captureRef={committedView}
     onSignOut={() => releaseDiary.current?.()}
   />;
@@ -151,37 +164,49 @@ function SessionLost() {
   );
 }
 
-function AccountMeals({ session, initialDraft, captureRef, onSignOut }: {
+function AccountMeals({ session, resume, captureRef, onSignOut }: {
   session: VerifiedSession;
-  initialDraft?: DiaryDraft;
-  captureRef: RefObject<(() => SessionDraft) | null>;
+  resume?: DiaryResume;
+  captureRef: RefObject<(() => SessionDiary) | null>;
   onSignOut: () => void;
 }) {
   const { userId, expiresAt } = session;
   const captureDialog = useRef<(() => DiaryDraft) | null>(null);
-  useLayoutEffect(() => {
-    captureRef.current = () => ({ session, draft: captureDialog.current?.() });
-    return () => { captureRef.current = null; };
-  }, [captureRef, session]);
-  const [diary, setDiary] = useState<DiarySnapshot | null>();
+  const [diary, setDiary] = useState<DiarySnapshot | null | undefined>(resume?.diary);
   const [loading, setLoading] = useState(true);
-  const [reviewingMutation, setReviewingMutation] = useState(false);
+  const [reviewingMutation, setReviewingMutation] = useState(resume?.reviewingMutation ?? false);
   const [error, setError] = useState("");
-  const [confirmation, setConfirmation] = useState<{ id: number; message: string }>();
-  const confirmationId = useRef(0);
+  const [confirmation, setConfirmation] = useState(resume?.confirmation);
+  const confirmationId = useRef(resume?.confirmation?.id ?? 0);
   const signOutPending = useRef(false);
   const [logout, setLogout] = useState<"pending" | "error">();
   const sessionExpired = diary === null;
-  const [request, setRequest] = useState({ filters: defaultDiaryFilters });
+  const [request, setRequest] = useState({ filters: resume?.requestedFilters ?? defaultDiaryFilters });
   const pendingRequest = useRef<AbortController>(null);
-  const createButton = useRef<HTMLButtonElement>(null);
   const filterButton = useRef<HTMLButtonElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
+  const getFallbackFocus = useCallback(() => title.current, []);
 
+  const initialDraft = resume?.draft;
   const [mealForm, setMealForm] = useState<{ meal?: DiaryMeal; restored?: MealDraft } | undefined>(
     initialDraft?.kind === "meal" ? { meal: initialDraft.meal, restored: initialDraft } : undefined,
   );
   const [filterDraft, setFilterDraft] = useState(initialDraft?.kind === "filters" ? initialDraft.filters : undefined);
+
+  useLayoutEffect(() => {
+    if (diary === null) return;
+    captureRef.current = () => ({
+      session,
+      resume: {
+        diary,
+        requestedFilters: request.filters,
+        confirmation,
+        reviewingMutation,
+        draft: captureDialog.current?.(),
+      },
+    });
+    return () => { captureRef.current = null; };
+  }, [captureRef, session, diary, request.filters, confirmation, reviewingMutation]);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -200,11 +225,12 @@ function AccountMeals({ session, initialDraft, captureRef, onSignOut }: {
   }, [menuOpen]);
 
   const expireSession = useCallback(() => {
+    captureRef.current = null;
     pendingRequest.current?.abort();
     setDiary(null);
     setMealForm(undefined);
     setFilterDraft(undefined);
-  }, []);
+  }, [captureRef]);
 
   async function closeSession() {
     if (signOutPending.current) return;
@@ -358,7 +384,7 @@ function AccountMeals({ session, initialDraft, captureRef, onSignOut }: {
             </p>
           </div>
           {diary && (
-            <button ref={createButton} className="app-button app-button-primary shrink-0" aria-disabled={reviewingMutation} onClick={event => {
+            <button className="app-button app-button-primary shrink-0" aria-disabled={reviewingMutation} onClick={event => {
               if (reviewingMutation) return;
               event.currentTarget.focus();
               setMealForm({});
@@ -458,7 +484,7 @@ function AccountMeals({ session, initialDraft, captureRef, onSignOut }: {
           initialDraft={mealForm.restored}
           captureRef={captureDialog}
           onClose={() => setMealForm(undefined)}
-          fallbackFocus={createButton}
+          getFallbackFocus={getFallbackFocus}
           userId={userId}
           onStart={() => setConfirmation(undefined)}
           onConfirmed={confirmChange}
@@ -467,7 +493,7 @@ function AccountMeals({ session, initialDraft, captureRef, onSignOut }: {
         />
       )}
       {filterDraft && (
-        <DiaryFiltersDialog filters={filterDraft} captureRef={captureDialog} onClose={() => setFilterDraft(undefined)} onApply={next => {
+        <DiaryFiltersDialog filters={filterDraft} captureRef={captureDialog} getFallbackFocus={getFallbackFocus} onClose={() => setFilterDraft(undefined)} onApply={next => {
           refresh(next);
           setFilterDraft(undefined);
         }} />
