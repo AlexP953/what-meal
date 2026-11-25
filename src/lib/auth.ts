@@ -1,14 +1,19 @@
-import NextAuth from "next-auth";
+import NextAuth, { AuthError, CredentialsSignin } from "next-auth";
 import { getAuthConfig } from "@/server/config";
 import Credentials from "next-auth/providers/credentials";
 import { authConfig } from "./auth.config";
-import { authorizeCredentials } from "@/server/credentials";
+import { limitedCredentials, LoginLimitError } from "@/server/login-access";
 import { verifySessionAccount } from "@/server/session-account";
+
+class AccessUnavailable extends CredentialsSignin { code = "persistence_unavailable"; }
+class AccessLimited extends CredentialsSignin {
+  constructor(retryAfter: number) { super(); this.code = `rate_limited_${retryAfter}`; }
+}
 
 export const { auth, signIn, signOut, handlers: { GET, POST } } = NextAuth(() => ({
   secret: getAuthConfig().secret,
   ...authConfig,
-  logger: { error() { console.error("Authentication failed"); } },
+  logger: { error(error) { console.error("Authentication failed", error instanceof AuthError ? error.type : "Unknown"); } },
   callbacks: {
     ...authConfig.callbacks,
     // https://authjs.dev/guides/extending-the-session#with-jwt
@@ -27,7 +32,11 @@ export const { auth, signIn, signOut, handlers: { GET, POST } } = NextAuth(() =>
     Credentials({
       credentials: { email: {}, password: {} },
       async authorize(creds) {
-        return authorizeCredentials(creds);
+        try { return await limitedCredentials(creds); }
+        catch (error) {
+          if (error instanceof LoginLimitError) throw new AccessLimited(error.retryAfter);
+          throw new AccessUnavailable();
+        }
       },
     }),
   ],
