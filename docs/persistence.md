@@ -75,6 +75,22 @@ ese campo equivalen a versión cero. El campo nunca pertenece a `PublicUser` ni
 a respuestas públicas. `verifySessionAccount` devuelve `valid`, `invalid` o
 `unavailable`, consulta el rol vigente y nunca concede acceso si falla MongoDB.
 Los consumidores de notificaciones deben solicitar `+fcmToken`.
+
+## Identidad y autorización
+
+`requireSession` conserva `{session}` o `{error: NextResponse}`. Descifra el JWT
+emitido por Auth.js, comprueba la fecha original y consulta la cuenta vigente sin
+caché entre solicitudes. Devuelve 401 para ausencia, caducidad, revocación o cuenta
+eliminada, y 503 genérico si no puede verificar la persistencia.
+`isAdmin` comprueba el rol de una sesión previamente validada. `forbid` devuelve
+403. El diario autoriza al propietario y conserva el acceso administrativo a
+comidas ajenas. No utilices identificadores ni roles enviados por el cliente
+como prueba de autorización. `user.id` es una cadena estable y `user.role` refleja
+el rol vigente. Las sesiones públicas no incluyen versiones ni fechas privadas.
+La fecha original del JWT limita el acceso a 24 horas, aunque Auth.js renueve la
+cookie. Los JWT anteriores sin versión y fecha original requieren otro acceso.
+
+## Validación del modelo User
 El rol no admite null ni eliminación mediante `$unset`.
 Las actualizaciones mediante consultas requieren `{runValidators: true}` para
 aplicar las validaciones del esquema, incluida la obligatoriedad del rol.

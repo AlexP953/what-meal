@@ -8,7 +8,7 @@ declare module "next-auth" {
     authVersion: number;
   }
   interface Session {
-    user: { id: string; role: "admin" | "user" } & DefaultSession["user"];
+    user: { id: string; role: "admin" | "user" } & Omit<NonNullable<DefaultSession["user"]>, "authVersion">;
   }
 }
 
