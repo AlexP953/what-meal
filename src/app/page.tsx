@@ -1,9 +1,5 @@
-import { requireSession } from "@/lib/authz";
-import LoginPage from "@/app/login/page";
-import MealsPage from "@/app/meals/page";
+import { redirect } from "next/navigation";
 
-export default async function Home() {
-  const { session } = await requireSession();
-
-  return <> {session ? <MealsPage/> : <LoginPage/>}</>;
+export default function Home() {
+  redirect("/meals");
 }

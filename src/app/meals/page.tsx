@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import AddMealModal from "./AddMealModal";
 import EditMealModal from "./EditMealModal";
 import DiaryDialog from "./DiaryDialog";
@@ -11,6 +11,8 @@ import {
   type DiaryChange, type DiaryFilters, type DiaryMeal, type DiarySnapshot,
 } from "./diary-client";
 import { FunnelIcon, XMarkIcon, Bars3Icon } from "@heroicons/react/24/outline";
+import { announceSessionChange, postAuth, watchSessionChange } from "../session-client";
+import AccessScreen from "../components/AccessScreen";
 import EnableNotifications from "../components/EnableNotifications";
 
 import type { MealReaction as Reaction, MealType } from "@/shared/meal";
@@ -23,18 +25,25 @@ const typeLabels: Record<MealType, string> = {
 };
 
 export default function MealsPage() {
-  const { data: session, status, update } = useSession();
-  if (status === "loading") return <p className="p-6" role="status">Cargando...</p>;
+  const { data: session, status } = useSession();
+  if (status === "loading") return <main className="app-surface p-6"><p role="status">Comprobando sesión…</p></main>;
   const userId = session?.user?.id;
-  if (status !== "authenticated" || !userId) {
-    return (
-      <div className="flex gap-4 p-6">
-        <button type="button" className="underline" onClick={() => void update()}>Volver a comprobar la sesión</button>
-        <Link href="/login" className="underline">Iniciar sesión</Link>
-      </div>
-    );
-  }
+  if (status !== "authenticated" || !userId) return <SessionLost />;
   return <AccountMeals key={`${userId}:${session.expires}`} userId={userId} expiresAt={Date.parse(session.expires)} />;
+}
+
+function SessionLost() {
+  return (
+    <AccessScreen title="Diario de comidas" description="Vuelve a iniciar sesión para ver tus comidas.">
+      <p role="alert" className="app-feedback app-error mt-4">La sesión ya no está disponible.</p>
+      <div className="mt-3 flex flex-wrap gap-x-4">
+        <Link href="/login" className="app-link">Iniciar sesión</Link>
+        <form action="/meals">
+          <button type="submit" className="app-link">Volver a comprobar la sesión</button>
+        </form>
+      </div>
+    </AccessScreen>
+  );
 }
 
 function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number }) {
@@ -43,6 +52,8 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const signOutPending = useRef(false);
+  const [logout, setLogout] = useState<"pending" | "error">();
   const sessionExpired = diary === null;
   const [request, setRequest] = useState({ filters: defaultDiaryFilters });
   const pendingRequest = useRef<AbortController>(null);
@@ -82,6 +93,26 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
     setSelectedMeal(null);
     setDraftFilters(null);
   }, []);
+
+  useEffect(() => watchSessionChange(expireSession), [expireSession]);
+
+  async function closeSession() {
+    if (signOutPending.current) return;
+    signOutPending.current = true;
+    expireSession();
+    setLogout("pending");
+    try {
+      const response = await postAuth("signout", new URLSearchParams({ callbackUrl: "/login" }));
+      if (!response?.ok) throw new Error("Sign-out failed");
+      const { url } = await response.json();
+      if (typeof url !== "string" || new URL(url).pathname !== "/login") throw new Error("Sign-out failed");
+      announceSessionChange();
+      window.location.replace("/login");
+    } catch {
+      setLogout("error");
+      signOutPending.current = false;
+    }
+  }
 
   useEffect(() => {
     if (!sessionExpired) return watchDiaryExpiry(expiresAt, expireSession);
@@ -135,14 +166,20 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
     refresh();
   }
 
-  if (sessionExpired) {
+  if (logout) {
     return (
-      <div className="p-6">
-        <p role="alert">La sesión ya no está disponible.</p>
-        <Link href="/login" className="underline">Iniciar sesión</Link>
-      </div>
+      <AccessScreen title="Cerrar sesión" description="Tu diario permanece oculto mientras cierras la sesión.">
+        {logout === "pending" ? <p role="status" className="app-feedback mt-4">Cerrando sesión…</p> : (
+          <>
+            <p role="alert" className="app-feedback app-error mt-4">No se pudo cerrar la sesión. Comprueba tu conexión.</p>
+            <button type="button" className="app-button mt-4" onClick={() => void closeSession()}>Reintentar cierre</button>
+          </>
+        )}
+      </AccessScreen>
     );
   }
+
+  if (sessionExpired) return <SessionLost />;
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 flex flex-col relative pb-32">
@@ -186,10 +223,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
                 </div>
 
                 <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    signOut({ callbackUrl: "/login" });
-                  }}
+                  onClick={() => void closeSession()}
                   className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                 >
                   Cerrar sesión

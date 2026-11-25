@@ -156,3 +156,9 @@ it("uses the canonical HTTPS origin and Secure cookies without AUTH_TRUST_HOST",
     app = await workspace.start("dev", authConfig);
   }
 }, 120000);
+
+it("sends the home entry through the protected diary route", async () => {
+  const response = await authClient(app.baseUrl).request("/");
+  expect(response.status).toBe(307);
+  expect(response.headers.get("location")).toBe("/meals");
+});

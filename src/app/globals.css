@@ -24,3 +24,114 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.app-surface {
+  min-height: 100dvh;
+  background: #f4f5ed;
+  color: #202c22;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  color-scheme: light;
+}
+
+.access-screen {
+  display: grid;
+  align-items: safe center;
+  justify-items: center;
+  padding: clamp(1rem, 5vw, 3rem);
+}
+
+.access-card {
+  width: min(100%, 27rem);
+  padding: clamp(1.25rem, 6vw, 2.5rem);
+  background: #fffefa;
+  border: 1px solid #d7ded0;
+  border-top: 4px solid #2a6043;
+  border-radius: 1.75rem;
+  box-shadow: 0 1rem 3rem #243b2010;
+}
+
+.app-title {
+  margin: 0.75rem 0 0.375rem;
+  font-size: clamp(1.875rem, 6vw, 2.75rem);
+  font-weight: 750;
+  line-height: 1.1;
+  letter-spacing: -0.055em;
+}
+
+.app-muted { color: #4e6053; }
+
+.app-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.app-form label {
+  display: block;
+  font-weight: 600;
+}
+
+.app-field {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.875rem;
+  margin-top: 0.25rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid #7a8a7e;
+  border-radius: 0.75rem;
+  background: white;
+  font-size: 1rem;
+}
+
+.app-button,
+.app-link {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 650;
+}
+
+.app-button {
+  padding: 0.625rem 1rem;
+  border: 1px solid #7a8a7e;
+  border-radius: 0.75rem;
+  background: #fffefa;
+}
+
+.app-button:not(:disabled):hover { background: #e8eee3; }
+
+.app-button-primary {
+  border-color: transparent;
+  background: #215337;
+  color: white;
+}
+
+.app-button-primary:not(:disabled):hover { background: #183e2a; }
+.app-button:disabled { opacity: 0.65; }
+
+.app-link {
+  color: #215337;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.app-surface :is(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid #276047;
+  outline-offset: 3px;
+}
+
+.app-feedback {
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  background: #e6efe0;
+  color: #204b34;
+  font-size: 0.875rem;
+}
+
+.app-error {
+  background: #fbece6;
+  color: #852b21;
+}
