@@ -42,6 +42,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
   const [diary, setDiary] = useState<DiarySnapshot | null>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [confirmation, setConfirmation] = useState<{ message: string }>();
   const signOutPending = useRef(false);
   const [logout, setLogout] = useState<"pending" | "error">();
   const sessionExpired = diary === null;
@@ -146,7 +147,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
     setRequest(current => ({ filters: filters ?? current.filters }));
   }
 
-  function confirmChange(change: DiaryChange) {
+  function confirmChange(change: DiaryChange, message?: string) {
     if (!(expiresAt > Date.now())) {
       expireSession();
       return;
@@ -154,6 +155,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
     setDiary(current => current && {
       ...current, meals: applyDiaryChange(current.meals, current.filters, change),
     });
+    if (message) setConfirmation({ message });
     refresh();
   }
 
@@ -248,6 +250,10 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
           </div>
         )}
 
+        <div role="status">
+          {confirmation && <p className="app-feedback mt-4">{confirmation.message}</p>}
+        </div>
+
         {diary && (
           <div className="diary-toolbar">
             <button
@@ -307,7 +313,11 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
       {openCreate && (
         <AddMealModal
           onClose={() => setOpenCreate(false)}
-          onCreated={meal => confirmChange({ meal })}
+          onCreated={change => confirmChange(change, "Comida añadida.")}
+          onCheckDiary={() => {
+            setOpenCreate(false);
+            refresh(defaultDiaryFilters);
+          }}
           onSessionLost={expireSession}
           userId={userId}
         />

@@ -1,202 +1,56 @@
 "use client";
 
-import { useState } from "react";
 import DiaryDialog from "./DiaryDialog";
+import MealFields from "./MealFields";
+import type { DiaryChange } from "./diary-client";
+import { readMealFields } from "./mutation-client";
+import useMealMutation from "./useMealMutation";
 
-import { EXPECTED_MEAL_ACCOUNT_HEADER, type ListedMeal, type MealReaction as Reaction, type MealType } from "@/shared/meal";
-import { isDiarySessionLost } from "./diary-client";
+const missingName = "Escribe el nombre de la comida.";
 
-export default function AddMealModal({
-  onClose,
-  onCreated,
-  onSessionLost,
-  userId,
-}: {
-  onSessionLost: () => void;
+export default function AddMealModal({ onClose, onCreated, onCheckDiary, onSessionLost, userId }: {
   onClose: () => void;
-  onCreated: (meal: ListedMeal) => void;
+  onCreated: (change: DiaryChange) => void;
+  onCheckDiary: () => void;
+  onSessionLost: () => void;
   userId: string;
 }) {
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError("");
-
-    const fd = new FormData(e.currentTarget);
-    const name = String(fd.get("name") || "").trim();
-    const date = String(fd.get("date") || "");
-    const type = String(fd.get("type") || "dinner") as MealType;
-    const reaction = String(fd.get("reaction") || "neutral") as Reaction;
-    const place = String(fd.get("place") || "").trim() || undefined;
-    const notes = String(fd.get("notes") || "").trim() || undefined;
-
-    if (!name) return setError("El nombre es obligatorio");
-    if (!date) return setError("La fecha es obligatoria");
-    if (!type) return setError("El tipo es obligatorio");
-    if (!reaction) return setError("La reacción es obligatoria");
-
-    setSubmitting(true);
-    try {
-      const res = await fetch("/api/meals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", [EXPECTED_MEAL_ACCOUNT_HEADER]: userId },
-        body: JSON.stringify({
-          name,
-          date,
-          type,
-          reaction,
-          place,
-          notes,
-        }),
-      });
-
-      if (isDiarySessionLost(res)) {
-        onSessionLost();
-        return;
-      }
-      const json = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(json?.error || "No se pudo crear la comida");
-      const meal = json as ListedMeal | null;
-      if (!meal?.id || !meal.user) throw new Error("La respuesta del alta está incompleta");
-      if (meal.user !== userId) {
-        onSessionLost();
-        return;
-      }
-
-      onCreated(meal);
-      onClose(); 
-    } catch (err) {
-      setError((err instanceof Error ? err.message : "") || "No se pudo crear el meal");
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const { submit, submitting, error, setError, uncertain } = useMealMutation(userId, change => {
+    onCreated(change);
+    onClose();
+  }, onSessionLost);
 
   return (
     <DiaryDialog titleId="add-meal-title" onClose={onClose} submitting={submitting}>
-      <div className="flex items-center justify-between mb-3">
-        <h2 id="add-meal-title" className="text-lg font-semibold text-gray-900">Añadir comida</h2>
-        <button
-          onClick={onClose}
-          disabled={submitting}
-          className="h-8 w-8 grid place-items-center rounded-full hover:bg-gray-100"
-          aria-label="Cerrar"
-        >
-          ×
-        </button>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label htmlFor="add-meal-name" className="block text-sm font-medium text-gray-700">
-            Nombre *
-          </label>
-          <input
-            id="add-meal-name"
-            name="name"
-            required
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
-            placeholder="Pizza Margarita"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="add-meal-date" className="block text-sm font-medium text-gray-700">
-              Fecha *
-            </label>
-            <input
-              type="date"
-              id="add-meal-date"
-              name="date"
-              required
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="add-meal-type" className="block text-sm font-medium text-gray-700">
-              Momento *
-            </label>
-            <select
-              id="add-meal-type"
-              name="type"
-              defaultValue="dinner"
-              required
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
-            >
-              <option value="breakfast">Desayuno</option>
-              <option value="lunch">Comida</option>
-              <option value="dinner">Cena</option>
-              <option value="snack">Snack</option>
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label htmlFor="add-meal-reaction" className="block text-sm font-medium text-gray-700">
-            Reacción *
-          </label>
-          <select
-            id="add-meal-reaction"
-            name="reaction"
-            defaultValue="neutral"
-            required
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
-          >
-            <option value="good">Bien</option>
-            <option value="neutral">Neutral</option>
-            <option value="bad">Mal</option>
-          </select>
-        </div>
-
-        <div>
-          <label htmlFor="add-meal-place" className="block text-sm font-medium text-gray-700">
-            Lugar
-          </label>
-          <input
-            id="add-meal-place"
-            name="place"
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
-            placeholder="Restaurante Italiano"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="add-meal-notes" className="block text-sm font-medium text-gray-700">
-            Notas
-          </label>
-          <textarea
-            id="add-meal-notes"
-            name="notes"
-            rows={3}
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
-            placeholder="¿Síntomas, sensaciones, etc.?"
-          />
-        </div>
-
-        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-
-        <div className="pt-1 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-          disabled={submitting}
-            className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={submitting || !userId}
-            className="px-4 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 active:bg-green-800 disabled:opacity-60"
-          >
-            {submitting ? "Guardando…" : "Guardar"}
-          </button>
+      <h2 id="add-meal-title" className="dialog-heading">Añadir comida</h2>
+      <form className="app-form" aria-busy={submitting} onSubmit={event => {
+        event.preventDefault();
+        const fields = readMealFields(event.currentTarget);
+        if (!fields.name) {
+          setError(missingName);
+          return;
+        }
+        void submit({ method: "POST", fields });
+      }}>
+        <MealFields nameInvalid={error === missingName} />
+        {error && <p id="meal-form-error" role="alert" className="app-feedback app-error">{error}</p>}
+        {uncertain && (
+          <p role="alert" className="app-feedback app-error">
+            No pudimos confirmar el alta. Consulta el diario para comprobar si ya se añadió la comida antes de repetirla.
+          </p>
+        )}
+        <div className="flex flex-wrap justify-end gap-2">
+          <button type="button" onClick={onClose} disabled={submitting} className="app-button">Cancelar</button>
+          {uncertain ? (
+            <button type="button" onClick={onCheckDiary} className="app-button app-button-primary">Consultar diario</button>
+          ) : (
+            <button type="submit" disabled={submitting} className="app-button app-button-primary">
+              {submitting ? "Guardando…" : "Guardar comida"}
+            </button>
+          )}
         </div>
       </form>
+      <p role="status" className="sr-only">{submitting ? "Guardando comida…" : ""}</p>
     </DiaryDialog>
   );
 }
