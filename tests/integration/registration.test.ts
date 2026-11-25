@@ -26,6 +26,9 @@ it("creates only one normal first account under concurrent normalized duplicates
 });
 
 it("returns safe stable errors for malformed JSON, input and quota", async () => {
+  const foreign = await POST(new Request("http://localhost/api/users", { method: "POST", headers: { origin: "http://foreign.example" }, body: JSON.stringify({ email: "foreign@example.com", password: "123456789012" }) }));
+  expect(foreign.status).toBe(403);
+  expect(await User.countDocuments()).toBe(1);
   const invalid = await POST(request({ email: "other@example.com", password: "123456789012", role: "admin" }));
   expect(invalid.status).toBe(400);
   expect(await invalid.json()).toMatchObject({ error: expect.any(String), code: "INVALID_INPUT" });

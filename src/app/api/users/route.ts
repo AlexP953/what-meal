@@ -6,8 +6,11 @@ import bcrypt from "bcryptjs";
 import { requireSession, isAdmin, forbid } from "@/lib/authz";
 import { reserveAccess } from "@/server/access-limits";
 import { accountError, apiError, readJson } from "@/server/http-errors";
+import { checkMutationOrigin } from "@/server/request-origin";
 
 export async function POST(req: Request) {
+  const originError = checkMutationOrigin(req);
+  if (originError) return originError;
   try {
     const limit = await reserveAccess("registration");
     if (!limit.allowed) return apiError(429, "RATE_LIMITED", "Demasiados intentos. Inténtalo más tarde", { "Retry-After": String(limit.retryAfter) });
@@ -50,7 +53,7 @@ export async function GET() {
       const { _id, email, name, role, createdAt } = serializeUser(user);
       return { _id, email, name, role, createdAt };
     }) }, { status: 200 });
-  } catch {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  } catch (error) {
+    return accountError(error);
   }
 }

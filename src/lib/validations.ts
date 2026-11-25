@@ -12,14 +12,17 @@ export const registerSchema = z.strictObject({
 });
 
 export const updateUserSchema = z
-  .object({
-    email: z.string().email().optional(),
-    name: z.string().min(1).optional(),
-    password: z.string().min(6).optional(),
+  .strictObject({
+    email: emailSchema.optional(),
+    name: accountNameSchema.optional(),
+    password: newPasswordSchema.optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "No hay campos para actualizar",
   });
+
+// https://zod.dev/api#safeextend preserves the nonempty-update refinement.
+export const updateUserAdminSchema = updateUserSchema.safeExtend({ role: z.enum(["admin", "user"]).optional() });
 
 export const addMealSchema = z.object({
   name: z.string().trim().min(1),
