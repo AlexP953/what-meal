@@ -2,27 +2,32 @@ import NextAuth from "next-auth";
 import { getAuthConfig } from "@/server/config";
 import Credentials from "next-auth/providers/credentials";
 import { authConfig } from "./auth.config";
-import { dbConnect } from "@/lib/db";
-import { User } from "@/app/models/User";
-import bcrypt from "bcryptjs";
-
-type UserAuth = { _id: import("mongoose").Types.ObjectId; email: string; passwordHash: string; name?: string; role: "admin"|"user" };
+import { authorizeCredentials } from "@/server/credentials";
+import { verifySessionAccount } from "@/server/session-account";
 
 export const { auth, signIn, signOut, handlers: { GET, POST } } = NextAuth(() => ({
   secret: getAuthConfig().secret,
   ...authConfig,
+  logger: { error() { console.error("Authentication failed"); } },
+  callbacks: {
+    ...authConfig.callbacks,
+    // https://authjs.dev/guides/extending-the-session#with-jwt
+    async jwt(args) {
+      const token = await authConfig.callbacks.jwt(args);
+      if (!token) return null;
+      const account = await verifySessionAccount(token.uid, token.authVersion);
+      if (account.status !== "valid") return null;
+      token.role = account.user.role;
+      token.email = account.user.email;
+      token.name = account.user.name;
+      return token;
+    },
+  },
   providers: [
     Credentials({
       credentials: { email: {}, password: {} },
       async authorize(creds) {
-        const email = String(creds?.email || "").toLowerCase().trim();
-        const password = String(creds?.password || "");
-        await dbConnect();
-        const user = await User.findOne({ email }).select("+passwordHash").lean<UserAuth | null>();
-        if (!user) return null;
-        const ok = await bcrypt.compare(password, user.passwordHash);
-        if (!ok) return null;
-        return { id: String(user._id), email: user.email, name: user.name || "", role: user.role };
+        return authorizeCredentials(creds);
       },
     }),
   ],
