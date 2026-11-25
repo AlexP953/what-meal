@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { mutateMeal } from "./mutation-client";
 import type { DiaryChange } from "./diary-client";
 
-export default function useMealMutation(userId: string, onConfirmed: (change: DiaryChange) => void, onSessionLost: () => void) {
+export default function useMealMutation(userId: string, onConfirmed: (change: DiaryChange) => void, onSessionLost: () => void, onStart: () => void) {
   const pending = useRef<AbortController>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -14,6 +14,7 @@ export default function useMealMutation(userId: string, onConfirmed: (change: Di
     if (pending.current || uncertain) return;
     const controller = new AbortController();
     pending.current = controller;
+    onStart();
     setSubmitting(true);
     setError("");
 

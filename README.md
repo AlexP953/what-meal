@@ -294,7 +294,11 @@ Usa una cuenta nueva y datos de prueba.
 
 Haz el recorrido a 320 píxeles CSS y en una pantalla ancha. Usa Tab, Mayús+Tab
 y Escape para comprobar el foco de los diálogos. En un dispositivo o emulador
-Android, abre la aplicación en Chrome y repite el recorrido con tacto.
+Android, conecta el dispositivo mediante ADB o inicia el emulador. Ejecuta
+`adb reverse tcp:3000 tcp:3000` en el equipo donde corre Next.js. Abre
+`http://localhost:3000/login` en Chrome para Android y repite el recorrido con tacto.
+El diario usa Web Locks para coordinar los cambios de sesión entre pestañas.
+Usa HTTPS al acceder desde otro equipo y localhost para el desarrollo local.
 Con el teclado en pantalla abierto, enfoca Notas y desplaza el formulario hasta
 la acción de guardar. Activa TalkBack para comprobar las etiquetas, los títulos
 de los diálogos y los avisos de carga, error y confirmación.

@@ -2,7 +2,7 @@ import { mealReactions, mealTypes } from "@/shared/meal";
 import type { DiaryMeal } from "./diary-client";
 import { reactionLabels, typeLabels } from "./labels";
 
-export default function MealFields({ meal, nameInvalid }: { meal?: DiaryMeal; nameInvalid: boolean }) {
+export default function MealFields({ meal, nameInvalid, dateInvalid }: { meal?: DiaryMeal; nameInvalid: boolean; dateInvalid: boolean }) {
   return (
     <>
       <label htmlFor="meal-name">
@@ -14,7 +14,8 @@ export default function MealFields({ meal, nameInvalid }: { meal?: DiaryMeal; na
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label htmlFor="meal-date" className="min-w-0">
           Fecha
-          <input type="date" id="meal-date" name="date" defaultValue={meal?.date} className="app-field" required />
+          <input type="date" id="meal-date" name="date" defaultValue={meal?.date} className="app-field" required
+            aria-invalid={dateInvalid} aria-describedby={dateInvalid ? "meal-form-error" : undefined} />
         </label>
 
         <label htmlFor="meal-type">

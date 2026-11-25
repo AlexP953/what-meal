@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { isCivilDate } from "@/shared/meal";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import DiaryDialog from "./DiaryDialog";
 import MealFields from "./MealFields";
@@ -9,14 +10,16 @@ import { readMealFields } from "./mutation-client";
 import useMealMutation from "./useMealMutation";
 
 const missingName = "Escribe el nombre de la comida.";
+const invalidDate = "Introduce una fecha válida con un año de cuatro cifras.";
 
-export default function MealFormDialog({ meal, onClose, onConfirmed, fallbackFocus, onCheckDiary, onSessionLost, userId }: {
+export default function MealFormDialog({ meal, onClose, onConfirmed, fallbackFocus, onCheckDiary, onSessionLost, onStart, userId }: {
   meal?: DiaryMeal;
   onClose: () => void;
   onConfirmed: (change: DiaryChange, message: string) => void;
   fallbackFocus: RefObject<HTMLButtonElement | null>;
   onCheckDiary: () => void;
   onSessionLost: () => void;
+  onStart: () => void;
   userId: string;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -27,7 +30,7 @@ export default function MealFormDialog({ meal, onClose, onConfirmed, fallbackFoc
     const message = "id" in change ? "Comida eliminada." : meal ? "Cambios guardados." : "Comida añadida.";
     onConfirmed(change, message);
     onClose();
-  }, onSessionLost);
+  }, onSessionLost, onStart);
 
   useLayoutEffect(() => {
     if (confirmDelete) cancelDelete.current?.focus();
@@ -62,19 +65,25 @@ export default function MealFormDialog({ meal, onClose, onConfirmed, fallbackFoc
         </button>
       </header>
 
-      <form className={confirmDelete ? "hidden" : "app-form"} aria-busy={submitting} aria-describedby={error && !confirmDelete ? "meal-form-error" : undefined}
+      <form noValidate className={confirmDelete ? "hidden" : "app-form"} aria-busy={submitting} aria-describedby={error && !confirmDelete ? "meal-form-error" : undefined}
         onSubmit={event => {
           event.preventDefault();
           if (confirmDelete || submitting || uncertain) return;
           const fields = readMealFields(event.currentTarget);
           if (!fields.name) {
+            onStart();
             setError(missingName);
+            return;
+          }
+          if (!isCivilDate(fields.date)) {
+            onStart();
+            setError(invalidDate);
             return;
           }
           void submit(meal ? { method: "PATCH", meal, fields } : { method: "POST", fields });
         }}>
         <fieldset disabled={submitting} className="grid min-w-0 gap-4">
-          <MealFields meal={meal} nameInvalid={error === missingName} />
+          <MealFields meal={meal} nameInvalid={error === missingName} dateInvalid={error === invalidDate} />
         </fieldset>
         {!confirmDelete && error && <p id="meal-form-error" role="alert" className="app-feedback app-error">{error}</p>}
         {!confirmDelete && uncertain && <p role="alert" className="app-feedback app-error">{uncertainMessage}</p>}

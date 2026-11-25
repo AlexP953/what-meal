@@ -67,3 +67,15 @@ it("confirms deletion only after receiving the expected successful response", as
   await expect(mutateMeal(operation, meal.user, signal)).resolves.toEqual({ status: "confirmed", change: { id: meal.id } });
   expect(fetcher.mock.calls[0][1]).toMatchObject({ method: "DELETE", headers: { "X-Expected-Account": meal.user } });
 });
+
+it("discards a confirmed response that arrives after the diary cancels the request", async () => {
+  const response = Promise.withResolvers<Response>();
+  vi.stubGlobal("fetch", vi.fn().mockReturnValue(response.promise));
+  const controller = new AbortController();
+  const pending = mutateMeal(operation, meal.user, controller.signal);
+
+  controller.abort();
+  response.resolve(Response.json(meal, { status: 201 }));
+
+  await expect(pending).resolves.toEqual({ status: "aborted" });
+});

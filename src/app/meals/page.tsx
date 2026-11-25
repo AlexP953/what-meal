@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
+import { flushSync } from "react-dom";
 import MealFormDialog from "./MealFormDialog";
 import DiaryFiltersDialog from "./DiaryFiltersDialog";
 import { reactionLabels, typeLabels } from "./labels";
@@ -11,21 +11,104 @@ import {
   type DiaryChange, type DiaryFilters, type DiaryMeal, type DiarySnapshot,
 } from "./diary-client";
 import { FunnelIcon, Bars3Icon, PlusIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
-import { announceSessionChange, postAuth, watchSessionChange } from "../session-client";
+import { holdDiaryLock, postAuth, readSession, watchSessionChange, type SessionCheck } from "../session-client";
+import SessionUnavailable from "./SessionUnavailable";
 import AccessScreen from "../components/AccessScreen";
 import { notificationsEnabled } from "@/shared/config";
 import EnableNotifications from "../components/EnableNotifications";
 
 export default function MealsPage() {
-  const { data: session, status } = useSession();
-  const [sessionChanged, setSessionChanged] = useState(false);
-  useEffect(() => watchSessionChange(() => setSessionChanged(true)), []);
+  const [session, setSession] = useState<SessionCheck>();
+  const [attempt, setAttempt] = useState(0);
+  const releaseDiary = useRef<() => void>(undefined);
 
-  if (sessionChanged) return <SessionLost />;
-  if (status === "loading") return <main className="app-surface p-6"><p role="status">Comprobando sesión…</p></main>;
-  const userId = session?.user?.id;
-  if (status !== "authenticated" || !userId) return <SessionLost />;
-  return <AccountMeals key={`${userId}:${session.expires}`} userId={userId} expiresAt={Date.parse(session.expires)} />;
+  useEffect(() => {
+    const lifetime = new AbortController();
+    const { signal } = lifetime;
+    const released = new Promise<void>(resolve => signal.addEventListener("abort", () => resolve(), { once: true }));
+    releaseDiary.current = () => lifetime.abort();
+    let holdingLock = false;
+    let checking = false;
+    let suspended = false;
+
+    async function verify() {
+      if (!holdingLock || checking || signal.aborted) return;
+      checking = true;
+      const result = await readSession(signal);
+      if (!signal.aborted) setSession(result);
+      checking = false;
+    }
+
+    function invalidate() {
+      if (signal.aborted && !suspended) return;
+      suspended = false;
+      flushSync(() => setSession({ status: "absent" }));
+      lifetime.abort();
+    }
+
+    function suspend() {
+      if (signal.aborted) return;
+      suspended = true;
+      flushSync(() => setSession(undefined));
+      lifetime.abort();
+    }
+
+    function verifyVisible() {
+      if (document.visibilityState !== "visible") return;
+      if (suspended) {
+        suspended = false;
+        setAttempt(value => value + 1);
+      } else {
+        void verify();
+      }
+    }
+
+    const stopWatching = watchSessionChange(invalidate);
+    window.addEventListener("pagehide", suspend);
+    window.addEventListener("pageshow", verifyVisible);
+    document.addEventListener("freeze", suspend);
+    document.addEventListener("resume", verifyVisible);
+    document.addEventListener("visibilitychange", verifyVisible);
+    window.addEventListener("focus", verifyVisible);
+
+    void holdDiaryLock(signal, async () => {
+      if (signal.aborted) return;
+      holdingLock = true;
+      await verify();
+      await released;
+    }).catch(() => {
+      if (!signal.aborted) setSession({ status: navigator.locks ? "unavailable" : "unsupported" });
+    });
+
+    return () => {
+      lifetime.abort();
+      stopWatching();
+      window.removeEventListener("pagehide", suspend);
+      window.removeEventListener("pageshow", verifyVisible);
+      document.removeEventListener("freeze", suspend);
+      document.removeEventListener("resume", verifyVisible);
+      document.removeEventListener("visibilitychange", verifyVisible);
+      window.removeEventListener("focus", verifyVisible);
+    };
+  }, [attempt]);
+
+  if (!session) return <main className="app-surface p-6"><p role="status">Comprobando sesión…</p></main>;
+  if (session.status === "unsupported") return (
+    <AccessScreen title="Diario de comidas" description="Abre el diario con un navegador compatible con Web Locks.">
+      <p role="alert" className="app-feedback app-error mt-4">Usa Chrome en HTTPS o en localhost para proteger los cambios de sesión entre pestañas.</p>
+    </AccessScreen>
+  );
+  if (session.status === "unavailable") return <SessionUnavailable retry={() => {
+    setSession(undefined);
+    setAttempt(value => value + 1);
+  }} />;
+  if (session.status !== "verified") return <SessionLost />;
+  return <AccountMeals
+    key={`${session.userId}:${session.expiresAt}`}
+    userId={session.userId}
+    expiresAt={session.expiresAt}
+    onSignOut={() => releaseDiary.current?.()}
+  />;
 }
 
 function SessionLost() {
@@ -42,12 +125,13 @@ function SessionLost() {
   );
 }
 
-function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number }) {
+function AccountMeals({ userId, expiresAt, onSignOut }: { userId: string; expiresAt: number; onSignOut: () => void }) {
   const [diary, setDiary] = useState<DiarySnapshot | null>();
   const [loading, setLoading] = useState(true);
   const [reviewingMutation, setReviewingMutation] = useState(false);
   const [error, setError] = useState("");
-  const [confirmation, setConfirmation] = useState<{ message: string }>();
+  const [confirmation, setConfirmation] = useState<{ id: number; message: string }>();
+  const confirmationId = useRef(0);
   const signOutPending = useRef(false);
   const [logout, setLogout] = useState<"pending" | "error">();
   const sessionExpired = diary === null;
@@ -86,14 +170,19 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
   async function closeSession() {
     if (signOutPending.current) return;
     signOutPending.current = true;
-    expireSession();
-    setLogout("pending");
+    flushSync(() => {
+      expireSession();
+      setLogout("pending");
+    });
+    onSignOut();
     try {
-      const response = await postAuth("signout", new URLSearchParams({ callbackUrl: "/login" }));
-      if (!response?.ok) throw new Error("Sign-out failed");
-      const { url } = await response.json();
-      if (typeof url !== "string" || new URL(url).pathname !== "/login") throw new Error("Sign-out failed");
-      announceSessionChange();
+      const response = await postAuth("signout", new URLSearchParams({ callbackUrl: "/login" }), async reply => {
+        if (!reply.ok) throw new Error("Sign-out failed");
+        const { url } = await reply.json();
+        if (typeof url !== "string" || new URL(url).pathname !== "/login") throw new Error("Sign-out failed");
+        if ((await readSession()).status !== "absent") throw new Error("Sign-out failed");
+      });
+      if (!response) throw new Error("Sign-out failed");
       window.location.replace("/login");
     } catch {
       setLogout("error");
@@ -159,7 +248,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
     setDiary(current => current && {
       ...current, meals: applyDiaryChange(current.meals, current.filters, change),
     });
-    setConfirmation({ message });
+    setConfirmation({ id: ++confirmationId.current, message });
     refresh();
   }
 
@@ -212,7 +301,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
             </button>
             {menuOpen && (
               <div id="diary-account-actions" className="diary-account-actions">
-                {notificationsEnabled && <EnableNotifications onDone={() => {
+                {notificationsEnabled && <EnableNotifications userId={userId} onDone={() => {
                   setMenuOpen(false);
                   menuButton.current?.focus();
                 }} />}
@@ -257,7 +346,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
         )}
 
         <div role="status">
-          {confirmation && <p className="app-feedback mt-4">{confirmation.message}</p>}
+          {confirmation && <p key={confirmation.id} className="app-feedback mt-4">{confirmation.message}</p>}
         </div>
 
         {diary && (
@@ -330,6 +419,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
           onClose={() => setMealForm(undefined)}
           fallbackFocus={createButton}
           userId={userId}
+          onStart={() => setConfirmation(undefined)}
           onConfirmed={confirmChange}
           onCheckDiary={checkMutation}
           onSessionLost={expireSession}

@@ -1,23 +1,21 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import { getClientMessaging } from "@/lib/firebase";
 import { notificationsEnabled } from "@/shared/config";
 
 export default function EnableNotifications({
   onDone,
+  userId,
 }: {
   onDone?: () => void;
+  userId: string;
 }) {
-  const { data: session, status } = useSession();
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const userId = session?.user?.id;
-
   // 🔹 Verifica si el usuario ya tiene token guardado
   useEffect(() => {
-    if (!notificationsEnabled || status !== "authenticated" || !userId) return;
+    if (!notificationsEnabled) return;
 
     async function checkToken() {
       try {
@@ -35,7 +33,7 @@ export default function EnableNotifications({
     }
 
     checkToken();
-  }, [userId, status]);
+  }, [userId]);
 
   // 🔹 Activar notificaciones
   async function enablePush() {
@@ -60,8 +58,8 @@ export default function EnableNotifications({
         serviceWorkerRegistration: registration,
       });
 
-      if (currentToken && session?.user?.id) {
-        const res = await fetch(`/api/users/${session!.user!.id}/token`, {
+      if (currentToken) {
+        const res = await fetch(`/api/users/${userId}/token`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token: currentToken }),
@@ -92,9 +90,7 @@ export default function EnableNotifications({
     if (!notificationsEnabled) return;
     try {
       setLoading(true);
-      if (!userId) return;
-
-      await fetch(`/api/users/${session!.user!.id}/token`, {
+      await fetch(`/api/users/${userId}/token`, {
         method: "DELETE",
       });
 

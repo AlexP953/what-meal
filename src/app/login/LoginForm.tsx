@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { announceSessionChange } from "../session-client";
 import { submitLogin } from "./submit";
 import AccessScreen from "../components/AccessScreen";
 import { useHydrated } from "../use-hydrated";
@@ -31,7 +30,6 @@ export default function LoginForm({ registered = false }: { registered?: boolean
       } else if (result === "invalid") {
         setError("Correo electrónico o contraseña incorrectos.");
       } else {
-        announceSessionChange();
         window.location.replace("/meals");
         return;
       }
