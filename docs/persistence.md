@@ -105,7 +105,8 @@ Si MongoDB impide verificar la cuenta, GET y POST de `/api/auth/session`
 devuelven 503 `PERSISTENCE_UNAVAILABLE` sin datos de sesión y conservan la
 cookie original. Una consulta posterior puede recuperar la sesión si la cookie
 sigue vigente. El diario descarta el estado de la cuenta anterior al cambiar
-de cuenta o perder la sesión.
+de cuenta o perder la sesión. Al vencer `session.expires`, descarta el diario y
+cancela la consulta en curso, aunque la pestaña permanezca inactiva.
 
 ## Validación del modelo User
 
@@ -254,6 +255,9 @@ descendentes. La misma consulta determina los resultados de la pantalla después
 de cada mutación confirmada. La pantalla aplica la respuesta confirmada a las
 filas visibles mientras vuelve a consultar el servidor. Si falla la consulta,
 la pantalla conserva el cambio confirmado y ofrece reintentar la consulta.
+Los filtros pendientes se confirman junto con las filas de una consulta exitosa.
+Si esa consulta falla, las mutaciones siguen usando los filtros de las filas
+visibles y el reintento conserva los filtros solicitados.
 Las fechas de los filtros se validan en el diálogo antes de aplicar el rango.
 
 | Estado | code | Significado |

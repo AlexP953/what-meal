@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import AddMealModal from "./AddMealModal";
 import EditMealModal from "./EditMealModal";
+import DiaryDialog from "./DiaryDialog";
 import {
-  applyDiaryChange, dateRangeError, defaultDiaryFilters, diarySearch, formatMealDate, readDiary,
-  type DiaryChange, type DiaryFilters, type DiaryMeal,
+  applyDiaryChange, dateRangeError, defaultDiaryFilters, formatMealDate, readDiary, watchDiaryExpiry,
+  type DiaryChange, type DiaryFilters, type DiaryMeal, type DiarySnapshot,
 } from "./diary-client";
 import { FunnelIcon, XMarkIcon, Bars3Icon } from "@heroicons/react/24/outline";
 import EnableNotifications from "../components/EnableNotifications";
@@ -33,18 +34,19 @@ export default function MealsPage() {
       </div>
     );
   }
-  return <AccountMeals key={userId} userId={userId} />;
+  return <AccountMeals key={`${userId}:${session.expires}`} userId={userId} expiresAt={Date.parse(session.expires)} />;
 }
 
-function AccountMeals({ userId }: { userId: string }) {
-  const [diary, setDiary] = useState<{ meals: DiaryMeal[]; filters: DiaryFilters } | null>({
+function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number }) {
+  const [diary, setDiary] = useState<DiarySnapshot | null>({
     meals: [], filters: defaultDiaryFilters,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const sessionExpired = diary === null;
-  const [revision, setRevision] = useState(0);
+  const [request, setRequest] = useState({ filters: defaultDiaryFilters });
   const pendingRequest = useRef<AbortController>(null);
+  const createButton = useRef<HTMLButtonElement>(null);
 
   const [openCreate, setOpenCreate] = useState(false);
 
@@ -81,25 +83,33 @@ function AccountMeals({ userId }: { userId: string }) {
     setDraftFilters(null);
   }, []);
 
-  const search = diarySearch(diary?.filters ?? defaultDiaryFilters).toString();
   useEffect(() => {
-    if (sessionExpired) return;
+    if (!sessionExpired) return watchDiaryExpiry(expiresAt, expireSession);
+  }, [expiresAt, expireSession, sessionExpired]);
+
+  useEffect(() => {
+    if (sessionExpired || !(expiresAt > Date.now())) return;
     const controller = new AbortController();
     const { signal } = controller;
     pendingRequest.current = controller;
 
     async function load() {
       try {
-        const result = await readDiary(search, userId, signal);
+        const result = await readDiary(request.filters, userId, signal);
         if (signal.aborted) return;
-        if (result === null) {
+        if (result === null || !(expiresAt > Date.now())) {
           expireSession();
           return;
         }
-        setDiary(current => current && { ...current, meals: result });
+        setDiary(current => current && !signal.aborted ? result : current);
         setError("");
       } catch {
-        if (!signal.aborted) setError("No se pudo actualizar la lista de comidas.");
+        if (signal.aborted) return;
+        if (!(expiresAt > Date.now())) {
+          expireSession();
+          return;
+        }
+        setError("No se pudo actualizar la lista de comidas.");
       } finally {
         if (!signal.aborted) setLoading(false);
       }
@@ -107,22 +117,21 @@ function AccountMeals({ userId }: { userId: string }) {
 
     void load();
     return () => controller.abort();
-  }, [search, revision, sessionExpired, userId, expireSession]);
+  }, [request, sessionExpired, userId, expiresAt, expireSession]);
 
-  function refresh() {
+  function refresh(filters?: DiaryFilters) {
     pendingRequest.current?.abort();
-    setRevision(value => value + 1);
+    setRequest(current => ({ filters: filters ?? current.filters }));
   }
 
   function confirmChange(change: DiaryChange) {
+    if (!(expiresAt > Date.now())) {
+      expireSession();
+      return;
+    }
     setDiary(current => current && {
       ...current, meals: applyDiaryChange(current.meals, current.filters, change),
     });
-    refresh();
-  }
-
-  function applyFilters(filters: DiaryFilters) {
-    setDiary(current => current && { ...current, filters });
     refresh();
   }
 
@@ -142,7 +151,10 @@ function AccountMeals({ userId }: { userId: string }) {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setDraftFilters(diary.filters)}
+            onClick={event => {
+              event.currentTarget.focus();
+              setDraftFilters(request.filters);
+            }}
             className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-gray-100 relative z-20"
             style={{ color: "#473f3f" }}
             title="Filtros"
@@ -192,7 +204,7 @@ function AccountMeals({ userId }: { userId: string }) {
       {error && (
         <div className="flex items-baseline gap-3 text-red-700">
           <p role="alert">{error}</p>
-          <button type="button" onClick={refresh} className="underline">Reintentar</button>
+          <button type="button" onClick={() => refresh()} className="underline">Reintentar</button>
         </div>
       )}
 
@@ -200,7 +212,10 @@ function AccountMeals({ userId }: { userId: string }) {
         {diary.meals.map((meal) => (
           <button
             key={meal.id}
-            onClick={() => setSelectedMeal(meal)}
+            onClick={event => {
+              event.currentTarget.focus();
+              setSelectedMeal(meal);
+            }}
             className={`w-full text-left rounded-xl border bg-white px-4 py-3 shadow-sm transition hover:shadow ${
               meal.reaction === "good"
                 ? "border-green-200 bg-green-50"
@@ -250,7 +265,11 @@ function AccountMeals({ userId }: { userId: string }) {
 
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2">
         <button
-          onClick={() => setOpenCreate(true)}
+          ref={createButton}
+          onClick={event => {
+            event.currentTarget.focus();
+            setOpenCreate(true);
+          }}
           className="px-6 py-3 rounded-full bg-green-600 text-white font-semibold shadow-lg hover:bg-green-700 active:bg-green-800 transition"
         >
           + Añadir comida
@@ -269,6 +288,7 @@ function AccountMeals({ userId }: { userId: string }) {
         <EditMealModal
           onClose={() => setSelectedMeal(null)}
           meal={selectedMeal}
+          fallbackFocus={createButton}
           userId={userId}
           onUpdated={({ userId, ...meal }) => confirmChange({
             meal: { ...meal, user: userId, createdAt: selectedMeal.createdAt },
@@ -278,168 +298,156 @@ function AccountMeals({ userId }: { userId: string }) {
         />
       )}
       {draftFilters && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="diary-filter-title"
-          onClick={() => setDraftFilters(null)}
-        >
-          <div className="absolute inset-0 bg-black/40" />
-          <div
-            className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 shadow-xl mx-0 sm:mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <h2 id="diary-filter-title" className="text-lg font-semibold text-gray-900">Filtros</h2>
-              <button
-                onClick={() => setDraftFilters(null)}
-                className="h-8 w-8 grid place-items-center rounded-full hover:bg-gray-100"
-                aria-label="Cerrar"
-              >
-                <XMarkIcon className="h-5 w-5" />
-              </button>
+        <DiaryDialog titleId="diary-filter-title" onClose={() => setDraftFilters(null)}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 id="diary-filter-title" className="text-lg font-semibold text-gray-900">Filtros</h2>
+            <button
+              onClick={() => setDraftFilters(null)}
+              className="h-8 w-8 grid place-items-center rounded-full hover:bg-gray-100"
+              aria-label="Cerrar"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <p id="diary-filter-reaction" className="text-sm font-medium text-gray-700 mb-2">
+                Reacción
+              </p>
+              <div role="group" aria-labelledby="diary-filter-reaction" className="flex flex-wrap gap-2">
+                {(["good", "neutral", "bad"] as Reaction[]).map((r) => {
+                  const active = draftFilters.reactions.includes(r);
+                  const label =
+                    r === "good" ? "Bien" : r === "bad" ? "Mal" : "Neutral";
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setDraftFilters({
+                        ...draftFilters,
+                        reactions: active ? draftFilters.reactions.filter(value => value !== r) : [...draftFilters.reactions, r],
+                      })}
+                      className={`px-3 py-1 rounded-full text-sm border transition ${
+                        active
+                          ? "bg-gray-900 text-white border-gray-900"
+                          : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">
-                  Reacción
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {(["good", "neutral", "bad"] as Reaction[]).map((r) => {
-                    const active = draftFilters.reactions.includes(r);
-                    const label =
-                      r === "good" ? "Bien" : r === "bad" ? "Mal" : "Neutral";
-                    return (
-                      <button
-                        key={r}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => setDraftFilters({
-                          ...draftFilters,
-                          reactions: active ? draftFilters.reactions.filter(value => value !== r) : [...draftFilters.reactions, r],
-                        })}
-                        className={`px-3 py-1 rounded-full text-sm border transition ${
-                          active
-                            ? "bg-gray-900 text-white border-gray-900"
-                            : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+            <div>
+              <label htmlFor="diary-filter-type" className="block text-sm font-medium text-gray-700 mb-2">
+                Tipo
+              </label>
+              <select
+                id="diary-filter-type"
+                value={draftFilters.type}
+                onChange={(e) => setDraftFilters({ ...draftFilters, type: e.target.value as MealType | "" })}
+                className="w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="">Todos</option>
+                <option value="breakfast">Desayuno</option>
+                <option value="lunch">Comida</option>
+                <option value="dinner">Cena</option>
+                <option value="snack">Snack</option>
+              </select>
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label htmlFor="diary-filter-type" className="block text-sm font-medium text-gray-700 mb-2">
-                  Tipo
+                <label htmlFor="diary-filter-desde" className="block text-sm font-medium text-gray-700">
+                  Desde
                 </label>
-                <select
-                  id="diary-filter-type"
-                  value={draftFilters.type}
-                  onChange={(e) => setDraftFilters({ ...draftFilters, type: e.target.value as MealType | "" })}
-                  className="w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
+                <input
+                  type="date"
+                  id="diary-filter-desde"
+                  value={draftFilters.dateFrom}
+                  aria-invalid={Boolean(rangeError)}
+                  aria-describedby={rangeError ? "diary-filter-date-error" : undefined}
+                  onChange={(e) => setDraftFilters({ ...draftFilters, dateFrom: e.target.value })}
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="diary-filter-hasta" className="block text-sm font-medium text-gray-700">
+                  Hasta
+                </label>
+                <input
+                  type="date"
+                  id="diary-filter-hasta"
+                  value={draftFilters.dateTo}
+                  aria-invalid={Boolean(rangeError)}
+                  aria-describedby={rangeError ? "diary-filter-date-error" : undefined}
+                  onChange={(e) => setDraftFilters({ ...draftFilters, dateTo: e.target.value })}
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+            </div>
+
+            {rangeError && <p id="diary-filter-date-error" role="alert" className="text-sm text-red-700">{rangeError}</p>}
+
+            <div>
+              <p id="diary-filter-order" className="block text-sm font-medium text-gray-700 mb-2">
+                Orden por fecha
+              </p>
+              <div role="group" aria-labelledby="diary-filter-order" className="flex gap-2">
+                <button
+                  type="button"
+                  aria-pressed={draftFilters.sortDir === "desc"}
+                  onClick={() => setDraftFilters({ ...draftFilters, sortDir: "desc" })}
+                  className={`px-3 py-1 rounded-lg border text-sm ${
+                    draftFilters.sortDir === "desc"
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
+                  }`}
                 >
-                  <option value="">Todos</option>
-                  <option value="breakfast">Desayuno</option>
-                  <option value="lunch">Comida</option>
-                  <option value="dinner">Cena</option>
-                  <option value="snack">Snack</option>
-                </select>
+                  Más nuevas
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={draftFilters.sortDir === "asc"}
+                  onClick={() => setDraftFilters({ ...draftFilters, sortDir: "asc" })}
+                  className={`px-3 py-1 rounded-lg border text-sm ${
+                    draftFilters.sortDir === "asc"
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  Más antiguas
+                </button>
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="diary-filter-desde" className="block text-sm font-medium text-gray-700">
-                    Desde
-                  </label>
-                  <input
-                    type="date"
-                    id="diary-filter-desde"
-                    value={draftFilters.dateFrom}
-                    aria-invalid={Boolean(rangeError)}
-                    aria-describedby={rangeError ? "diary-filter-date-error" : undefined}
-                    onChange={(e) => setDraftFilters({ ...draftFilters, dateFrom: e.target.value })}
-                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="diary-filter-hasta" className="block text-sm font-medium text-gray-700">
-                    Hasta
-                  </label>
-                  <input
-                    type="date"
-                    id="diary-filter-hasta"
-                    value={draftFilters.dateTo}
-                    aria-invalid={Boolean(rangeError)}
-                    aria-describedby={rangeError ? "diary-filter-date-error" : undefined}
-                    onChange={(e) => setDraftFilters({ ...draftFilters, dateTo: e.target.value })}
-                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                </div>
-              </div>
-
-              {rangeError && <p id="diary-filter-date-error" role="alert" className="text-sm text-red-700">{rangeError}</p>}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Orden por fecha
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    aria-pressed={draftFilters.sortDir === "desc"}
-                    onClick={() => setDraftFilters({ ...draftFilters, sortDir: "desc" })}
-                    className={`px-3 py-1 rounded-lg border text-sm ${
-                      draftFilters.sortDir === "desc"
-                        ? "bg-gray-900 text-white border-gray-900"
-                        : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    Más nuevas
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={draftFilters.sortDir === "asc"}
-                    onClick={() => setDraftFilters({ ...draftFilters, sortDir: "asc" })}
-                    className={`px-3 py-1 rounded-lg border text-sm ${
-                      draftFilters.sortDir === "asc"
-                        ? "bg-gray-900 text-white border-gray-900"
-                        : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    Más antiguas
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5 flex items-center justify-between">
-              <button
-                onClick={() => {
-                  setDraftFilters(defaultDiaryFilters);
-                  applyFilters(defaultDiaryFilters);
-                }}
-                className="text-sm text-gray-600 underline decoration-dotted hover:text-gray-800"
-              >
-                Limpiar filtros
-              </button>
-              <button
-                disabled={Boolean(rangeError)}
-                onClick={() => {
-                  applyFilters(draftFilters);
-                  setDraftFilters(null);
-                }}
-                className="px-4 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 active:bg-green-800 disabled:opacity-60"
-              >
-                Aplicar
-              </button>
             </div>
           </div>
-        </div>
+
+          <div className="mt-5 flex items-center justify-between">
+            <button
+              onClick={() => {
+                setDraftFilters(defaultDiaryFilters);
+                refresh(defaultDiaryFilters);
+              }}
+              className="text-sm text-gray-600 underline decoration-dotted hover:text-gray-800"
+            >
+              Limpiar filtros
+            </button>
+            <button
+              disabled={Boolean(rangeError)}
+              onClick={() => {
+                refresh(draftFilters);
+                setDraftFilters(null);
+              }}
+              className="px-4 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 active:bg-green-800 disabled:opacity-60"
+            >
+              Aplicar
+            </button>
+          </div>
+        </DiaryDialog>
       )}
     </div>
   );

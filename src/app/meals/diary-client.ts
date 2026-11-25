@@ -23,6 +23,7 @@ export const defaultDiaryFilters: DiaryFilters = {
 
 export type DiaryMeal = Omit<ListedMeal, "updatedAt">;
 export type DiaryChange = { meal: DiaryMeal } | { id: string };
+export type DiarySnapshot = { meals: DiaryMeal[]; filters: DiaryFilters };
 
 export function dateRangeError(from: string, to: string) {
   if ((from && !isCivilDate(from)) || (to && !isCivilDate(to))) {
@@ -58,8 +59,8 @@ export function isDiarySessionLost(response: Response) {
   return response.status === 401 || response.status === 409;
 }
 
-export async function readDiary(search: string, userId: string, signal: AbortSignal): Promise<DiaryMeal[] | null> {
-  const response = await fetch(`/api/meals?${search}`, { signal, cache: "no-store" });
+export async function readDiary(filters: DiaryFilters, userId: string, signal: AbortSignal): Promise<DiarySnapshot | null> {
+  const response = await fetch(`/api/meals?${diarySearch(filters)}`, { signal, cache: "no-store" });
   signal.throwIfAborted();
   if (response.status === 401) return null;
   if (!response.ok) throw new Error("No se pudieron cargar las comidas");
@@ -68,10 +69,37 @@ export async function readDiary(search: string, userId: string, signal: AbortSig
   signal.throwIfAborted();
   // A cookie can change before the session provider reports the new account.
   if (meals.some(meal => meal.user !== userId)) return null;
-  return meals;
+  return { filters, meals };
 }
 
 export function formatMealDate(date: string): string {
   const [year, month, day] = date.split("-");
   return `${day}-${month}-${year}`;
+}
+
+export function watchDiaryExpiry(expiresAt: number, onExpire: () => void) {
+  let timer: ReturnType<typeof setTimeout>;
+  function stop() {
+    clearTimeout(timer);
+    document.removeEventListener("visibilitychange", check);
+    window.removeEventListener("focus", check);
+    window.removeEventListener("pageshow", check);
+  }
+
+  function check() {
+    clearTimeout(timer);
+    const remaining = expiresAt - Date.now();
+    if (!(remaining > 0)) {
+      stop();
+      onExpire();
+      return;
+    }
+    timer = setTimeout(check, Math.min(remaining, 2_147_483_647));
+  }
+
+  document.addEventListener("visibilitychange", check);
+  window.addEventListener("focus", check);
+  window.addEventListener("pageshow", check);
+  check();
+  return stop;
 }
