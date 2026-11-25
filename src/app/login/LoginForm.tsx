@@ -47,7 +47,7 @@ export default function LoginForm({ registered = false }: { registered?: boolean
         <div className="flex justify-center mb-6">
           <div className="text-5xl font-extrabold tracking-tight leading-none">
             <span className="align-middle">
-              <Image width={160} height={64} src="/logo.svg" alt="WhatMeal" className="h-16 ml-8 w-auto" />
+              <Image width={220} height={60} src="/logo.svg" alt="WhatMeal" loading="eager" className="ml-8" />
             </span>
           </div>
         </div>
