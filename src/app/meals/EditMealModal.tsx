@@ -7,16 +7,16 @@ import { TrashIcon } from "@heroicons/react/24/outline";
 import type { EditedMeal, MealReaction as Reaction, MealType } from "@/shared/meal";
 
 export default function EditMealModal({
-  open,
   onClose,
   meal,
   onUpdated,
   onDeleted,
+  onSessionLost,
 }: {
-  open: boolean;
+  onSessionLost: () => void;
   onClose: () => void;
-  meal: MealLean | null;
-  onUpdated: (meal: MealLean) => void;
+  meal: MealLean;
+  onUpdated: (meal: EditedMeal) => void;
   onDeleted: (mealId: string) => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -25,22 +25,19 @@ export default function EditMealModal({
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !submitting) onClose();
     }
-    if (open) document.addEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [onClose, submitting]);
 
   useEffect(() => {
-    if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [open]);
-
-  if (!open || !meal) return null;
+  }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -61,28 +58,21 @@ export default function EditMealModal({
 
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/meals/${meal!._id}`, {
+      const res = await fetch(`/api/meals/${meal._id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, date, type, reaction, place, notes }),
       });
 
+      if (res.status === 401) {
+        onSessionLost();
+        return;
+      }
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "No se pudo actualizar la comida");
       const updatedMeal = json?.meal as EditedMeal | undefined;
       if (!updatedMeal?.id || !updatedMeal.userId) throw new Error("La respuesta de la edición está incompleta");
-      const updated: MealLean = {
-        _id: updatedMeal.id,
-        userId: updatedMeal.userId,
-        name: updatedMeal.name,
-        date: updatedMeal.date,
-        type: updatedMeal.type,
-        reaction: updatedMeal.reaction,
-        place: updatedMeal.place ?? undefined,
-        notes: updatedMeal.notes ?? undefined,
-      };
-
-      onUpdated(updated);
+      onUpdated(updatedMeal);
       onClose();
     } catch (err) {
       setError((err instanceof Error ? err.message : "") || "No se pudo actualizar el meal");
@@ -92,13 +82,16 @@ export default function EditMealModal({
   }
 
   async function handleDelete() {
-    if (!meal) return;
     if (!confirm("¿Seguro que quieres eliminar este meal?")) return;
 
     setError("");
     setSubmitting(true);
     try {
       const res = await fetch(`/api/meals/${meal._id}`, { method: "DELETE" });
+      if (res.status === 401) {
+        onSessionLost();
+        return;
+      }
       if (!res.ok) {
         const json = await res.json().catch(() => null);
         throw new Error(json?.error || "No se pudo eliminar la comida");
@@ -117,7 +110,7 @@ export default function EditMealModal({
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
       aria-modal="true"
       role="dialog"
-      onClick={onClose}
+      onClick={submitting ? undefined : onClose}
     >
       <div className="absolute inset-0 bg-black/40" />
 
@@ -130,6 +123,7 @@ export default function EditMealModal({
           <h2 className="text-lg font-semibold text-gray-900">Editar meal</h2>
           <button
             onClick={onClose}
+            disabled={submitting}
             className="h-8 w-8 grid place-items-center rounded-full hover:bg-gray-100"
             aria-label="Cerrar"
           >
@@ -225,7 +219,7 @@ export default function EditMealModal({
             />
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
 
           <div className="pt-1 flex items-center justify-between">
             <button
@@ -242,6 +236,7 @@ export default function EditMealModal({
               <button
                 type="button"
                 onClick={onClose}
+            disabled={submitting}
                 className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50"
               >
                 Cancelar

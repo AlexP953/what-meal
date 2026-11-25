@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { MealLean } from "../types";
 import { useSession, signOut } from "next-auth/react";
 import AddMealModal from "./AddMealModal";
 import EditMealModal from "./EditMealModal";
+import { diarySearch, formatMealDate, readDiary } from "./diary-client";
 import { FunnelIcon, XMarkIcon, Bars3Icon } from "@heroicons/react/24/outline";
 import EnableNotifications from "../components/EnableNotifications";
 
@@ -37,10 +38,12 @@ function AccountMeals({ userId }: { userId: string }) {
   const [meals, setMeals] = useState<MealLean[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const pendingRequest = useRef<AbortController>(null);
 
   const [openCreate, setOpenCreate] = useState(false);
 
-  const [openEdit, setOpenEdit] = useState(false);
   const [selectedMeal, setSelectedMeal] = useState<MealLean | null>(null);
 
   const [openFilters, setOpenFilters] = useState(false);
@@ -71,24 +74,31 @@ function AccountMeals({ userId }: { userId: string }) {
     };
   }, [menuOpen]);
 
-  function formatDate(date: string): string {
-    if (!date) return "";
-    const [y, m, d] = date.split("-");
-    return `${d}-${m}-${y}`;
-  }
+  const expireSession = useCallback(() => {
+    pendingRequest.current?.abort();
+    setMeals([]);
+    setOpenCreate(false);
+    setSelectedMeal(null);
+    setSessionExpired(true);
+  }, []);
 
+  const search = diarySearch({ type, reactions, dateFrom, dateTo, sortDir }).toString();
   useEffect(() => {
+    if (sessionExpired) return;
     const controller = new AbortController();
     const { signal } = controller;
+    pendingRequest.current = controller;
 
-    async function fetchMeals() {
+    async function load() {
       try {
-        const res = await fetch(`/api/users/${userId}`, { signal });
-        if (!res.ok) throw new Error("Error en la petición");
-
-        const data = await res.json();
-        const rawMeals = Array.isArray(data.user?.meals) ? data.user.meals : [];
-        if (!signal.aborted) setMeals(rawMeals.filter(Boolean));
+        const result = await readDiary(search, userId, signal);
+        if (signal.aborted) return;
+        if (result === null) {
+          expireSession();
+          return;
+        }
+        setMeals(result);
+        setError("");
       } catch {
         if (!signal.aborted) setError("No se pudieron cargar las comidas");
       } finally {
@@ -96,62 +106,14 @@ function AccountMeals({ userId }: { userId: string }) {
       }
     }
 
-    fetchMeals();
+    void load();
     return () => controller.abort();
-  }, [userId]);
+  }, [search, revision, sessionExpired, userId, expireSession]);
 
-  function handleCreated(newMeal: MealLean | undefined) {
-    if (!newMeal || !newMeal._id || !newMeal.reaction) return;
-    setMeals((prev) => [newMeal, ...prev.filter(Boolean)]);
-    setOpenCreate(false);
+  function refresh() {
+    pendingRequest.current?.abort();
+    setRevision(value => value + 1);
   }
-
-  function openEditModal(meal: MealLean) {
-    setSelectedMeal(meal);
-    setOpenEdit(true);
-  }
-
-  function handleUpdated(updated: MealLean) {
-    setMeals((prev) =>
-      prev.map((m) => (m._id === updated._id ? { ...m, ...updated } : m))
-    );
-    setOpenEdit(false);
-    setSelectedMeal(null);
-  }
-
-  function handleDeleted(mealId: string) {
-    setMeals((prev) => prev.filter((m) => m._id !== mealId));
-  }
-
-  const filteredMeals = useMemo(() => {
-    const from = dateFrom ? new Date(dateFrom) : null;
-    const to = dateTo ? new Date(dateTo) : null;
-
-    return [...meals]
-      .filter((m) => {
-        if (reactions.length && !reactions.includes(m.reaction as Reaction))
-          return false;
-
-        if (type && m.type !== type) return false;
-
-        if (from || to) {
-          const md = new Date(m.date);
-          if (from && md < from) return false;
-          if (to) {
-            const toEnd = new Date(to);
-            toEnd.setHours(23, 59, 59, 999);
-            if (md > toEnd) return false;
-          }
-        }
-
-        return true;
-      })
-      .sort((a, b) => {
-        const da = new Date(a.date).getTime();
-        const db = new Date(b.date).getTime();
-        return sortDir === "desc" ? db - da : da - db;
-      });
-  }, [meals, reactions, type, dateFrom, dateTo, sortDir]);
 
   function toggleReaction(r: Reaction) {
     setReactions((prev) =>
@@ -167,6 +129,15 @@ function AccountMeals({ userId }: { userId: string }) {
     setSortDir("desc");
   }
 
+  if (sessionExpired) {
+    return (
+      <div className="p-6">
+        <p role="alert">La sesión ya no está disponible.</p>
+        <Link href="/login" className="underline">Iniciar sesión</Link>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-6 flex flex-col relative pb-32">
       <div className="mb-4 flex items-center justify-between relative z-10">
@@ -174,10 +145,7 @@ function AccountMeals({ userId }: { userId: string }) {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => {
-              setOpenFilters(true);
-              console.log("abrir filtros");
-            }}
+            onClick={() => setOpenFilters(true)}
             className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-gray-100 relative z-20"
             style={{ color: "#473f3f" }}
             title="Filtros"
@@ -224,13 +192,13 @@ function AccountMeals({ userId }: { userId: string }) {
       </div>
 
       {loading && <p style={{ color: "#473f3f" }}>Cargando...</p>}
-      {error && <p className="text-red-500">{error}</p>}
+      {error && <p className="text-red-500" role="alert">{error}</p>}
 
       <div className="space-y-3 mt-4">
-        {filteredMeals.map((meal) => (
+        {meals.map((meal) => (
           <button
             key={meal._id}
-            onClick={() => openEditModal(meal)}
+            onClick={() => setSelectedMeal(meal)}
             className={`w-full text-left rounded-xl border bg-white px-4 py-3 shadow-sm transition hover:shadow ${
               meal.reaction === "good"
                 ? "border-green-200 bg-green-50"
@@ -243,7 +211,7 @@ function AccountMeals({ userId }: { userId: string }) {
               <div>
                 <p className="font-medium text-gray-800">{meal.name}</p>
                 <p className="text-sm text-gray-500">
-                  {typeLabels[meal.type]} • {formatDate(meal.date)}
+                  {typeLabels[meal.type]} • {formatMealDate(meal.date)}
                 </p>
                 {meal.place && (
                   <p className="text-sm text-gray-400">{meal.place}</p>
@@ -271,7 +239,7 @@ function AccountMeals({ userId }: { userId: string }) {
             </div>
           </button>
         ))}
-        {!loading && !error && filteredMeals.length === 0 && (
+        {!loading && !error && meals.length === 0 && (
           <p className="text-gray-500">
             No hay resultados con los filtros actuales.
           </p>
@@ -287,20 +255,23 @@ function AccountMeals({ userId }: { userId: string }) {
         </button>
       </div>
 
-      <AddMealModal
-        open={openCreate}
-        onClose={() => setOpenCreate(false)}
-        onCreated={handleCreated}
-        userId={userId}
-      />
-
-      <EditMealModal
-        open={openEdit}
-        onClose={() => setOpenEdit(false)}
-        meal={selectedMeal}
-        onUpdated={handleUpdated}
-        onDeleted={() => selectedMeal && handleDeleted(selectedMeal._id)}
-      />
+      {openCreate && (
+        <AddMealModal
+          onClose={() => setOpenCreate(false)}
+          onCreated={refresh}
+          onSessionLost={expireSession}
+          userId={userId}
+        />
+      )}
+      {selectedMeal && (
+        <EditMealModal
+          onClose={() => setSelectedMeal(null)}
+          meal={selectedMeal}
+          onUpdated={refresh}
+          onDeleted={refresh}
+          onSessionLost={expireSession}
+        />
+      )}
       {openFilters && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"

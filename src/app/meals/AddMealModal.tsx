@@ -1,19 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MealLean } from "../types";
 
 import type { ListedMeal, MealReaction as Reaction, MealType } from "@/shared/meal";
 
 export default function AddMealModal({
-  open,
   onClose,
   onCreated,
+  onSessionLost,
   userId,
 }: {
-  open: boolean;
+  onSessionLost: () => void;
   onClose: () => void;
-  onCreated: (meal: MealLean) => void;
+  onCreated: (meal: ListedMeal) => void;
   userId: string;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -22,22 +21,19 @@ export default function AddMealModal({
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && !submitting) onClose();
     }
-    if (open) document.addEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [onClose, submitting]);
 
   useEffect(() => {
-    if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [open]);
-
-  if (!open) return null;
+  }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -71,22 +67,20 @@ export default function AddMealModal({
         }),
       });
 
+      if (res.status === 401) {
+        onSessionLost();
+        return;
+      }
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "No se pudo crear la comida");
       const meal = json as ListedMeal | null;
       if (!meal?.id || !meal.user) throw new Error("La respuesta del alta está incompleta");
-      const created: MealLean = {
-        _id: meal.id,
-        userId: meal.user,
-        name: meal.name,
-        date: meal.date,
-        type: meal.type,
-        reaction: meal.reaction,
-        place: meal.place ?? undefined,
-        notes: meal.notes ?? undefined,
-      };
+      if (meal.user !== userId) {
+        onSessionLost();
+        return;
+      }
 
-      onCreated(created); 
+      onCreated(meal);
       onClose(); 
     } catch (err) {
       setError((err instanceof Error ? err.message : "") || "No se pudo crear el meal");
@@ -100,7 +94,7 @@ export default function AddMealModal({
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
       aria-modal="true"
       role="dialog"
-      onClick={onClose} 
+      onClick={submitting ? undefined : onClose}
     >
       <div className="absolute inset-0 bg-black/40" />
 
@@ -113,6 +107,7 @@ export default function AddMealModal({
           <h2 className="text-lg font-semibold text-gray-900">Añadir comida</h2>
           <button
             onClick={onClose}
+            disabled={submitting}
             className="h-8 w-8 grid place-items-center rounded-full hover:bg-gray-100"
             aria-label="Cerrar"
           >
@@ -203,12 +198,13 @@ export default function AddMealModal({
             />
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
 
           <div className="pt-1 flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
+            disabled={submitting}
               className="px-4 py-2 rounded-lg border bg-white hover:bg-gray-50"
             >
               Cancelar
