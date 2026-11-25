@@ -78,6 +78,13 @@ Los consumidores de notificaciones deben solicitar `+fcmToken`.
 
 ## Identidad y autorización
 
+Las mutaciones autenticadas de cuentas y tokens rechazan un `Origin` ajeno o
+`null` con 403 `FORBIDDEN_ORIGIN`. Comparan con `AUTH_URL` o con el origen servido,
+sin utilizar cabeceras reenviadas. Fetch Metadata rechaza contextos ajenos.
+Los clientes locales sin `Origin` ni Fetch Metadata conservan acceso mediante
+su sesión válida. Las rutas de notificaciones deshabilitadas devuelven 503 antes
+de comprobar origen, sesión o persistencia.
+
 `requireSession` conserva `{session}` o `{error: NextResponse}`. Descifra el JWT
 emitido por Auth.js, comprueba la fecha original y consulta la cuenta vigente sin
 caché entre solicitudes. Devuelve 401 para ausencia, caducidad, revocación o cuenta

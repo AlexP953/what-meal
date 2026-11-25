@@ -7,6 +7,7 @@ import { updateUserSchema } from "@/lib/validations";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { isValidObjectId } from "mongoose";
+import { checkMutationOrigin } from "@/server/request-origin";
 
 const updateUserAdminSchema = updateUserSchema.extend({
   role: z.enum(["admin", "user"]).optional(),
@@ -17,6 +18,9 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
   const { id } = await context.params;
 
   if (error) return error;
+
+  const originError = checkMutationOrigin(req);
+  if (originError) return originError;
 
   if (!session?.user) return forbid();
 
@@ -87,6 +91,9 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
   const { session, error } = await requireSession();
   if (error) return error;
+
+  const originError = checkMutationOrigin(req);
+  if (originError) return originError;
 
   if (!isAdmin(session)) return forbid();
 

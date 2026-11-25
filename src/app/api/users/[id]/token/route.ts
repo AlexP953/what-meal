@@ -4,12 +4,15 @@ import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import { User } from "@/app/models/User";
 import mongoose from "mongoose";
+import { checkMutationOrigin } from "@/server/request-origin";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!notificationsEnabled) return notificationsDisabled();
+  const originError = checkMutationOrigin(req);
+  if (originError) return originError;
   const { id } = await params;
   const { token } = await req.json();
 
@@ -38,10 +41,12 @@ export async function POST(
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   if (!notificationsEnabled) return notificationsDisabled();
+  const originError = checkMutationOrigin(req);
+  if (originError) return originError;
   const { id } = await params;
   await dbConnect();
   const objectId = new mongoose.Types.ObjectId(id);
