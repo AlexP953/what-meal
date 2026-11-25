@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { encode } from "next-auth/jwt";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { Types } from "mongoose";
+import { Meal } from "@/server/persistence/meal";
 import { User } from "@/server/persistence/user";
 import { prepareDatabase } from "@/server/persistence/prepare";
 import { authClient, isolatedTestApp } from "../helpers/app";
@@ -154,4 +155,53 @@ it("rejects all routes for absent, expired, revoked and removed sessions", async
   expect((await client.request(path)).status).toBe(200);
   await User.deleteOne({ _id: id });
   for (const [route, options] of requests) await expectError(await client.request(route, options), 401, "UNAUTHORIZED");
+});
+
+it("combines inclusive filters and sorts deterministically within the authorized account", async () => {
+  const query = "?dateFrom=2030-08-10&dateTo=2030-08-13";
+  const early = await createMeal(owner, { date: "2030-08-10", reaction: "bad" });
+  const late = await createMeal(owner, { date: "2030-08-13" });
+  const tie = await createMeal(owner, { date: late.date });
+  const latest = await createMeal(owner, { date: late.date });
+  const rival = await createMeal(other, { date: late.date });
+  const administrative = await createMeal(admin, { date: late.date });
+  await createMeal(owner, { date: late.date, reaction: "neutral" });
+  await createMeal(owner, { date: late.date, type: "snack" });
+  await Meal.collection.updateMany(
+    { _id: { $in: [late.id, tie.id].map(id => new Types.ObjectId(id)) } },
+    { $set: { createdAt: new Date("2026-01-01Z") } },
+  );
+  await Meal.collection.updateOne(
+    { _id: new Types.ObjectId(latest.id) },
+    { $set: { createdAt: new Date("2026-02-01Z") } },
+  );
+
+  async function list(client: Client, search: string) {
+    const response = await client.request(collection + search);
+    expect(response.status).toBe(200);
+    return (await response.json() as { id: string; user: string }[]);
+  }
+
+  const filters = "&reaction=good&reaction=bad&type=lunch";
+  const sameDay = [latest.id, ...[late.id, tie.id].sort().reverse()];
+  const expected = [...sameDay, early.id];
+  const result = await list(owner, query + filters + "&userId=" + otherId);
+  expect(result.map(meal => meal.id)).toEqual(expected);
+  expect(result.every(meal => meal.user === ownerId)).toBe(true);
+  expect((await list(owner, query + filters + "&sortDir=asc")).map(meal => meal.id)).toEqual([early.id, ...sameDay]);
+  expect((await list(owner, "?dateFrom=2030-08-13" + filters)).map(meal => meal.id)).toEqual(sameDay);
+  expect((await list(owner, "?dateTo=2030-08-10" + filters)).map(meal => meal.id)).toContain(early.id);
+  const throughEarly = await list(owner, "?dateTo=2030-08-10" + filters);
+  expect(throughEarly.map(meal => meal.id)).not.toContain(late.id);
+  expect((await list(other, query + filters + "&userId=invalid")).map(meal => meal.id)).toEqual([rival.id]);
+  expect((await list(admin, query + filters)).map(meal => meal.id)).toEqual([administrative.id]);
+  expect((await list(admin, query + filters + "&userId=" + ownerId)).map(meal => meal.id)).toEqual(expected);
+  expect(await list(owner, "?dateFrom=2030-08-14")).toEqual([]);
+
+  for (const invalid of [
+    "type=tea", "reaction=good&reaction=unknown", "reaction=", "sortDir=up", "dateFrom=2023-02-29",
+    "dateTo=2024-02-29T00%3A00%3A00Z", "dateFrom=2030-08-13&dateTo=2030-08-10", "userId=", "userId=abc",
+  ]) {
+    await expectError(await admin.request(collection + "?" + invalid), 400, "INVALID_INPUT");
+  }
 });

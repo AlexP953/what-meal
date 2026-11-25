@@ -71,6 +71,7 @@ it.each([
 ] as const)("maps storage failures to public errors", async (failure, status, code) => {
   for (const request of [
     () => post(JSON.stringify(validMeal)),
+    () => list(new Request("http://localhost/api/meals")),
     () => detail(new Request("http://localhost/api/meals/id"), { params: Promise.resolve({ id: "507f1f77bcf86cd799439012" }) }),
   ]) {
     fixture.connect.mockRejectedValueOnce(failure);

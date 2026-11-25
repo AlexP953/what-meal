@@ -24,9 +24,11 @@ export const updateUserSchema = z
 // https://zod.dev/api#safeextend preserves the nonempty-update refinement.
 export const updateUserAdminSchema = updateUserSchema.safeExtend({ role: z.enum(["admin", "user"]).optional() });
 
+const civilDateSchema = z.string().refine(isCivilDate, "Fecha civil inválida: YYYY-MM-DD");
+
 export const addMealSchema = z.object({
   name: z.string().trim().min(1),
-  date: z.string().refine(isCivilDate, "Fecha civil inválida: YYYY-MM-DD"),
+  date: civilDateSchema,
   type: z.enum(mealTypes),
   reaction: z.enum(mealReactions),
   place: z.string().optional(),
@@ -37,3 +39,11 @@ export const updateMealSchema = addMealSchema.partial().refine(
   (data) => Object.keys(data).length > 0,
   { message: "No hay campos para actualizar" },
 );
+
+export const mealFiltersSchema = z.object({
+  type: addMealSchema.shape.type.optional(),
+  reactions: z.array(addMealSchema.shape.reaction),
+  dateFrom: civilDateSchema.optional(),
+  dateTo: civilDateSchema.optional(),
+  sortDir: z.enum(["asc", "desc"]).default("desc"),
+}).refine(({ dateFrom, dateTo }) => !dateFrom || !dateTo || dateFrom <= dateTo);

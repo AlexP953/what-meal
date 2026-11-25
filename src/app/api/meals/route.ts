@@ -1,53 +1,51 @@
 import { NextResponse } from "next/server";
+import { isValidObjectId, type QueryFilter } from "mongoose";
 import { dbConnect } from "@/lib/db";
-import { Meal, serializeMeal } from "@/server/persistence/meal";
-import { addMealSchema } from "@/lib/validations";
+import { Meal, serializeListedMeal, type MealRecord } from "@/server/persistence/meal";
+import { addMealSchema, mealFiltersSchema } from "@/lib/validations";
 import { requireSession, isAdmin } from "@/lib/authz";
-import { Types } from "mongoose";
 import { apiError, dataError, readJson } from "@/server/http-errors";
 import { checkMutationOrigin } from "@/server/request-origin";
-import type { ListedMeal } from "@/shared/meal";
-
-function isError<T>(
-  x: T | { error: NextResponse }
-): x is { error: NextResponse } {
-  return typeof (x as { error?: unknown })?.error !== "undefined";
-}
 
 export async function GET(req: Request) {
-  const res = await requireSession();
-  if (isError(res)) return res.error;
-  const { session } = res;
+  try {
+    const { session, error } = await requireSession();
+    if (error) return error;
 
-  const url = new URL(req.url);
-  const filter: Record<string, string> = { userId: session.user!.id };
-
-  const userIdParam = url.searchParams.get("userId");
-  if (userIdParam && isAdmin(session)) {
-    if (!Types.ObjectId.isValid(userIdParam)) {
-      return NextResponse.json({ message: "userId inválido" }, { status: 400 });
+    const { searchParams } = new URL(req.url);
+    const selectedUser = isAdmin(session) ? searchParams.get("userId") : null;
+    if (selectedUser !== null && !isValidObjectId(selectedUser)) {
+      return apiError(400, "INVALID_INPUT", "Identificador de cuenta no válido");
     }
-    filter.userId = userIdParam;
-  }
 
-  await dbConnect();
-  const items = await Meal.find(filter)
-    .sort({ date: -1, createdAt: -1 })
-    .lean();
-  return NextResponse.json(
-    items.map(serializeMeal).map((m) => ({
-      id: m.id,
-      name: m.name,
-      date: m.date,
-      type: m.type,
-      reaction: m.reaction,
-      place: m.place ?? null,
-      notes: m.notes ?? null,
-      user: m.userId,
-      createdAt: m.createdAt,
-      updatedAt: m.updatedAt,
-    }))
-  );
+    const parsed = mealFiltersSchema.safeParse({
+      type: searchParams.get("type") ?? undefined,
+      reactions: searchParams.getAll("reaction"),
+      dateFrom: searchParams.get("dateFrom") ?? undefined,
+      dateTo: searchParams.get("dateTo") ?? undefined,
+      sortDir: searchParams.get("sortDir") ?? undefined,
+    });
+    if (!parsed.success) return apiError(400, "INVALID_INPUT", "Filtros no válidos");
+
+    const { type, reactions, dateFrom, dateTo, sortDir } = parsed.data;
+    const filter: QueryFilter<MealRecord> = { userId: selectedUser ?? session.user!.id };
+    if (type) filter.type = type;
+    if (reactions.length) filter.reaction = { $in: reactions };
+    if (dateFrom || dateTo) {
+      filter.date = {
+        ...(dateFrom && { $gte: dateFrom }),
+        ...(dateTo && { $lte: dateTo }),
+      };
+    }
+
+    await dbConnect();
+    const items = await Meal.find(filter)
+      .sort({ date: sortDir === "asc" ? 1 : -1, createdAt: -1, _id: -1 })
+      .lean();
+    return NextResponse.json(items.map(serializeListedMeal));
+  } catch (error) {
+    return dataError(error);
+  }
 }
 
 export async function POST(req: Request) {
@@ -61,13 +59,8 @@ export async function POST(req: Request) {
     if (!parsed.success) return apiError(400, "INVALID_INPUT", "Datos no válidos");
 
     await dbConnect();
-    const { _id, userId, place, notes, ...meal } = serializeMeal(
-      await Meal.create({ ...parsed.data, userId: session.user!.id })
-    );
-    const result: ListedMeal = {
-      ...meal, id: _id, user: userId, place: place ?? null, notes: notes ?? null,
-    };
-    return NextResponse.json(result, { status: 201 });
+    const meal = await Meal.create({ ...parsed.data, userId: session.user!.id });
+    return NextResponse.json(serializeListedMeal(meal), { status: 201 });
   } catch (error) {
     return dataError(error);
   }
