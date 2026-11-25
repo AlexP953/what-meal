@@ -182,8 +182,9 @@ export default function MealsPage() {
                   e.stopPropagation();
                   setMenuOpen((v) => !v);
                 }}
-                className="p-2 rounded-lg hover:bg-gray-100 focus:outline-none"
+                className="p-2 rounded-lg hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-green-700"
                 aria-label="Menú"
+                aria-expanded={menuOpen}
               >
                 <Bars3Icon className="h-6 w-6 text-gray-700" />
               </button>
@@ -200,11 +201,11 @@ export default function MealsPage() {
                   <button
                     onClick={() => {
                       setMenuOpen(false);
-                      signOut({ callbackUrl: window.location.origin });
+                      signOut({ callbackUrl: "/login" });
                     }}
                     className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                   >
-                    Logout
+                    Cerrar sesión
                   </button>
                 </div>
               )}

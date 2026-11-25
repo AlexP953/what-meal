@@ -80,7 +80,12 @@ Los consumidores de notificaciones deben solicitar `+fcmToken`.
 
 Las mutaciones autenticadas de cuentas y tokens rechazan un `Origin` ajeno o
 `null` con 403 `FORBIDDEN_ORIGIN`. Comparan con `AUTH_URL` o con el origen servido,
-sin utilizar cabeceras reenviadas. Fetch Metadata rechaza contextos ajenos.
+sin utilizar cabeceras reenviadas. Configura `AUTH_URL` para HTTPS y proxies.
+Sin esa variable, el origen usa HTTP y el `Host` directo, porque Next.js deriva
+el protocolo de su URL interna mediante cabeceras reenviadas.
+Las funciones Auth.js de servidor sin una solicitud exigen `AUTH_URL` antes de
+construir destinos, incluidos los accesos sin proveedor explícito.
+Fetch Metadata rechaza contextos ajenos.
 Los clientes locales sin `Origin` ni Fetch Metadata conservan acceso mediante
 su sesión válida. Las rutas de notificaciones deshabilitadas devuelven 503 antes
 de comprobar origen, sesión o persistencia.

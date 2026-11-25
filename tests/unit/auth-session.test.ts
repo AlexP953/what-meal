@@ -7,6 +7,14 @@ vi.mock("bcryptjs", () => ({ default: { compare: async (password: string) => pas
 import { authorizeCredentials } from "@/server/credentials";
 afterEach(() => vi.useRealTimers());
 
+it("rejects external and malformed redirect destinations", async () => {
+  const baseUrl = "https://whatmeal.example";
+  for (const url of ["https://foreign.example", "//foreign.example", "/\\foreign.example", "javascript:alert(1)", "https://whatmeal.example@foreign.example"]) {
+    expect(await authConfig.callbacks.redirect({ url, baseUrl })).toBe(baseUrl);
+  }
+  expect(await authConfig.callbacks.redirect({ url: "/meals", baseUrl })).toBe(`${baseUrl}/meals`);
+});
+
 it("accepts old passwords, validates types and never distinguishes wrong credentials", async () => {
   fixture.user = { _id: "507f1f77bcf86cd799439011", email: "a@example.com", role: "user", passwordHash: "private", authVersion: 3 };
   expect(await authorizeCredentials({ email: " A@EXAMPLE.COM ", password: "old" })).toMatchObject({ id: fixture.user._id, authVersion: 3 });

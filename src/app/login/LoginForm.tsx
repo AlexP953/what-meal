@@ -3,16 +3,18 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { signIn } from "next-auth/react";
 
 export default function LoginForm({ registered = false }: { registered?: boolean }) {
   const router = useRouter();
+  const submitting = useRef(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submitting.current) return;
     setError("");
 
     const formData = new FormData(e.currentTarget);
@@ -23,26 +25,19 @@ export default function LoginForm({ registered = false }: { registered?: boolean
       setError("El email no es válido");
       return;
     }
-    if (password.length < 5) {
-      setError("La contraseña debe tener al menos 5 caracteres");
-      return;
-    }
-
+    submitting.current = true;
     setLoading(true);
-
-    const res = await signIn("credentials", {
-      redirect: false,
-      email,
-      password,
-    });
-
-    setLoading(false);
-
-    if (res?.error) {
-      setError("Email o contraseña incorrectos");
-    } else {
-      router.push("/");
-      router.refresh();
+    try {
+      const res = await signIn("credentials", { redirect: false, email, password });
+      if (res?.status === 429) setError("Demasiados intentos. Espera antes de volver a iniciar sesión.");
+      else if (res?.status === 503) setError("Servicio temporalmente no disponible. Inténtalo más tarde.");
+      else if (!res?.ok || res.error) setError("Email o contraseña incorrectos");
+      else { router.push("/"); router.refresh(); }
+    } catch {
+      setError("No se pudo conectar. Comprueba tu conexión e inténtalo de nuevo.");
+    } finally {
+      submitting.current = false;
+      setLoading(false);
     }
   }
 
@@ -62,7 +57,7 @@ export default function LoginForm({ registered = false }: { registered?: boolean
         </h1>
         {registered && <p role="status" className="mt-4 text-sm text-green-800">Cuenta creada. Inicia sesión para continuar.</p>}
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-8 space-y-4" aria-busy={loading} aria-describedby={error ? "login-error" : undefined}>
           <div className="relative">
             <label htmlFor="email" className="sr-only">
               Email
@@ -87,8 +82,9 @@ export default function LoginForm({ registered = false }: { registered?: boolean
                 id="email"
                 name="email"
                 type="email"
+                autoComplete="email"
                 required
-                placeholder="alexperis95@gmail.com"
+                placeholder="tu@ejemplo.com"
                 className="w-full bg-transparent text-base text-gray-900 placeholder-gray-400 outline-none"
               />
             </div>
@@ -96,7 +92,7 @@ export default function LoginForm({ registered = false }: { registered?: boolean
 
           <div className="relative">
             <label htmlFor="password" className="sr-only">
-              Password
+              Contraseña
             </label>
             <div className="flex items-center gap-3 rounded-xl border bg-white px-3 py-3 focus-within:ring-2 focus-within:ring-green-500">
               <svg
@@ -118,6 +114,7 @@ export default function LoginForm({ registered = false }: { registered?: boolean
                 id="password"
                 name="password"
                 type="password"
+                autoComplete="current-password"
                 required
                 placeholder="•••••"
                 className="w-full bg-transparent text-base text-gray-900 placeholder-gray-400 outline-none"
@@ -135,14 +132,14 @@ export default function LoginForm({ registered = false }: { registered?: boolean
             </div> */}
           </div>
 
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && <p id="login-error" role="alert" className="text-sm text-red-700">{error}</p>}
 
           <button
             type="submit"
             disabled={loading}
-            className="mt-2 w-full h-11 rounded-xl bg-green-500 text-white font-semibold hover:bg-green-800 active:bg-green-800 transition disabled:opacity-50"
+            className="mt-2 w-full h-11 rounded-xl bg-green-700 text-white font-semibold hover:bg-green-800 active:bg-green-800 transition focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
           >
-            {loading ? "Cargando..." : "LOGIN"}
+            {loading ? "Cargando..." : "Iniciar sesión"}
           </button>
         </form>
         <p className="mt-5 text-center text-sm"><Link href="/register" className="text-green-800 underline">Crear una cuenta</Link></p>

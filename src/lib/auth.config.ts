@@ -5,6 +5,13 @@ export const authConfig = {
   providers: [], 
   session: { strategy: "jwt", maxAge: SESSION_MAX_AGE },
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      try {
+        const destination = new URL(url, baseUrl);
+        if (destination.origin === new URL(baseUrl).origin && !destination.username && !destination.password) return destination.href;
+      } catch { /* Invalid destinations return to the application. */ }
+      return baseUrl;
+    },
     async jwt({ token, user, trigger }) {
       if (user && trigger !== "update") {
         token.uid = user.id;
