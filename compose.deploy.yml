@@ -40,6 +40,7 @@ services:
     secrets:
       - mongo_root_password
       - mongo_app_password
+      - mongo_backup_password
     volumes:
       - ./deploy/provision-mongo.js:/opt/deploy/provision-mongo.js:ro
     networks: [database]
@@ -90,11 +91,27 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  mongo-backup:
+    image: *mongo-image
+    profiles: [operations]
+    entrypoint: ["bash", "/opt/deploy/mongo-dump.sh"]
+    command: ["version"]
+    secrets:
+      - mongo_backup_password
+    volumes:
+      - ./deploy/mongo-dump.sh:/opt/deploy/mongo-dump.sh:ro
+    networks: [database]
+    # The attached stdout stream carries the archive. Keep it out of Docker logs.
+    logging:
+      driver: none
+
 secrets:
   auth_secret:
     file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/auth-secret
   mongo_root_password:
     file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/mongo-root-password
+  mongo_backup_password:
+    file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/mongo-backup-password
   mongo_app_password:
     file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/mongo-app-password
 

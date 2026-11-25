@@ -221,10 +221,10 @@ Next.js y la tarea de preparación leen archivos con UID 1000.
 ```bash
 export AUTH_URL=https://comidas.tudominio.es
 export WHATMEAL_SECRETS_DIR=/etc/whatmeal/secrets
-sudo install -d -m 0700 "$WHATMEAL_SECRETS_DIR"
+sudo install -d -m 0700 -o "$(id -u)" "$WHATMEAL_SECRETS_DIR"
 sudo bash -eu -o noclobber -c '
   umask 077
-  for name in auth-secret mongo-app-password mongo-root-password; do
+  for name in auth-secret mongo-app-password mongo-root-password mongo-backup-password; do
     openssl rand -hex 32 > "$1/$name"
   done
   chown 1000 "$1/auth-secret" "$1/mongo-app-password"
@@ -235,7 +235,7 @@ docker compose -p whatmeal-deploy -f compose.deploy.yml build
 docker compose -p whatmeal-deploy -f compose.deploy.yml up -d --wait
 ```
 
-Crea estos archivos una sola vez antes del primer arranque. Guarda los tres
+Crea estos archivos una sola vez antes del primer arranque. Guarda los cuatro
 valores por separado en tu gestor de secretos. Conserva los archivos al
 reiniciar y actualizar. Cambiar el archivo de una contraseña de MongoDB
 requiere cambiar también la cuenta correspondiente en la base. La compilación
@@ -289,6 +289,8 @@ La prueba crea una cuenta y una comida ficticias. Conserva el archivo privado
 si vas a comparar el diario tras una actualización o restauración. El archivo
 contiene las credenciales de la cuenta ficticia y los datos esperados. Elimínalo
 cuando termines y registra solo el resultado de las comprobaciones.
+
+Para programar y verificar copias, consulta [el procedimiento de copia](docs/persistence.md#copias-del-despliegue).
 
 ## MongoDB local
 

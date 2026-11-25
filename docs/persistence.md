@@ -306,3 +306,55 @@ Los errores de conexión son `DatabaseConnectionError`. Los errores de datos son
 `ValidationError` o `CastError`. La duplicidad usa el código MongoDB `11000`.
 Los códigos HTTP y permisos de cuentas siguen la matriz anterior. Las operaciones
 del diario conservan sus contratos y la autorización mediante `requireSession`.
+
+## Copias del despliegue
+
+La copia usa las herramientas de la imagen fijada de MongoDB y una cuenta de
+solo lectura sobre `whatmeal`. Incluye las colecciones de la base, sus opciones
+y sus índices. Las cuentas de MongoDB se vuelven a aprovisionar desde los
+archivos de secretos. Las cuentas de What Meal forman parte de la copia.
+
+Si la instalación ya existía antes de añadir las copias, genera únicamente
+`mongo-backup-password` en el mismo directorio de secretos. Desde la revisión
+nueva, ejecuta `docker compose -p whatmeal-deploy -f compose.deploy.yml run --rm mongo-provision`
+para crear la cuenta de lectura. Sustituye `whatmeal-deploy` si usas otro nombre
+de proyecto.
+
+Ejecuta la tarea en Linux con Bash, util-linux (`flock`), GNU Coreutils y gzip.
+Crea un directorio privado en un volumen cifrado, accesible solo para la cuenta
+que ejecutará la tarea. Exporta el mismo `AUTH_URL` y `WHATMEAL_SECRETS_DIR` del
+despliegue. Si usaste `-p` con otro nombre, exporta el mismo nombre en
+`WHATMEAL_PROJECT_NAME`. Ejecuta la tarea desde la revisión desplegada.
+
+```bash
+install -d -m 0700 "$HOME/whatmeal-backups"
+bash scripts/backup-deploy.sh "$HOME/whatmeal-backups"
+```
+
+Programa la tarea durante una ventana de mantenimiento. Suspende cualquier
+otro escritor de la base y espera a que termine su trabajo antes de copiar.
+Evita actualizaciones, cambios de esquema y arranques manuales durante la
+ventana. La tarea detiene What Meal y recupera su estado anterior, incluso
+cuando falla la copia. El comando devuelve un error si no puede recuperar el
+servicio. Caddy puede responder 502 mientras la aplicación está parada. MongoDB puede
+seguir eliminando límites de acceso caducados por TTL durante la copia.
+
+El comando devuelve la ruta de una copia publicada. Los directorios
+`.incomplete.*` corresponden a copias en curso o interrumpidas. Comprueba una
+copia publicada antes de transferirla o restaurarla.
+
+```bash
+cd /ruta/a/la/copia-publicada
+sha256sum --strict -c SHA256SUMS
+gzip -t database.archive.gz
+```
+
+Transfiere el directorio con sus tres archivos mediante un canal cifrado a un
+destino externo protegido. Guarda el acceso a ese destino en el gestor de
+secretos. Por ejemplo, programa una copia diaria con un temporizador de
+systemd que cargue las variables públicas del despliegue y registre solo el
+resultado. Configura la retención en el destino externo según los objetivos
+de recuperación de la instalación. Comprueba periódicamente la restauración
+antes de retirar copias antiguas.
+
+[Opciones de mongodump](https://www.mongodb.com/docs/database-tools/mongodump/).
