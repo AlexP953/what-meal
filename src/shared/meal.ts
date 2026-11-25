@@ -1,3 +1,5 @@
+export const EXPECTED_MEAL_ACCOUNT_HEADER = "X-Expected-Account";
+
 export const mealTypes = ["breakfast", "lunch", "dinner", "snack"] as const;
 export const mealReactions = ["good", "bad", "neutral"] as const;
 export type MealType = typeof mealTypes[number];
@@ -16,6 +18,14 @@ export interface PublicMeal {
   createdAt: string;
   updatedAt: string;
 }
+
+export type ListedMeal = Omit<PublicMeal, "_id" | "userId" | "place" | "notes"> & {
+  user: string;
+  place: string | null;
+  notes: string | null;
+};
+
+export type EditedMeal = Omit<ListedMeal, "user" | "createdAt" | "updatedAt"> & { userId: string };
 
 // Gregorian calendar arithmetic avoids Date's timezone and year-0-to-99 conversions.
 export function isCivilDate(value: string): boolean {

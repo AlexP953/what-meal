@@ -1,17 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { MealLean } from "../types";
 import { useSession, signOut } from "next-auth/react";
 import AddMealModal from "./AddMealModal";
 import EditMealModal from "./EditMealModal";
+import DiaryDialog from "./DiaryDialog";
+import {
+  applyDiaryChange, dateRangeError, defaultDiaryFilters, formatMealDate, readDiary, watchDiaryExpiry,
+  type DiaryChange, type DiaryFilters, type DiaryMeal, type DiarySnapshot,
+} from "./diary-client";
 import { FunnelIcon, XMarkIcon, Bars3Icon } from "@heroicons/react/24/outline";
 import EnableNotifications from "../components/EnableNotifications";
 
 import type { MealReaction as Reaction, MealType } from "@/shared/meal";
 
-const typeLabels: Record<MealLean["type"], string> = {
+const typeLabels: Record<MealType, string> = {
   breakfast: "Desayuno",
   lunch: "Comida",
   dinner: "Cena",
@@ -30,25 +34,25 @@ export default function MealsPage() {
       </div>
     );
   }
-  return <AccountMeals key={userId} userId={userId} />;
+  return <AccountMeals key={`${userId}:${session.expires}`} userId={userId} expiresAt={Date.parse(session.expires)} />;
 }
 
-function AccountMeals({ userId }: { userId: string }) {
-  const [meals, setMeals] = useState<MealLean[]>([]);
+function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number }) {
+  const [diary, setDiary] = useState<DiarySnapshot | null>({
+    meals: [], filters: defaultDiaryFilters,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const sessionExpired = diary === null;
+  const [request, setRequest] = useState({ filters: defaultDiaryFilters });
+  const pendingRequest = useRef<AbortController>(null);
+  const createButton = useRef<HTMLButtonElement>(null);
 
   const [openCreate, setOpenCreate] = useState(false);
 
-  const [openEdit, setOpenEdit] = useState(false);
-  const [selectedMeal, setSelectedMeal] = useState<MealLean | null>(null);
-
-  const [openFilters, setOpenFilters] = useState(false);
-  const [reactions, setReactions] = useState<Reaction[]>([]);
-  const [type, setType] = useState<MealType | "">("");
-  const [dateFrom, setDateFrom] = useState<string>("");
-  const [dateTo, setDateTo] = useState<string>("");
-  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+  const [selectedMeal, setSelectedMeal] = useState<DiaryMeal | null>(null);
+  const [draftFilters, setDraftFilters] = useState<DiaryFilters | null>(null);
+  const rangeError = draftFilters ? dateRangeError(draftFilters.dateFrom, draftFilters.dateTo) : "";
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -71,100 +75,73 @@ function AccountMeals({ userId }: { userId: string }) {
     };
   }, [menuOpen]);
 
-  function formatDate(date: string): string {
-    if (!date) return "";
-    const [y, m, d] = date.split("-");
-    return `${d}-${m}-${y}`;
-  }
+  const expireSession = useCallback(() => {
+    pendingRequest.current?.abort();
+    setDiary(null);
+    setOpenCreate(false);
+    setSelectedMeal(null);
+    setDraftFilters(null);
+  }, []);
 
   useEffect(() => {
+    if (!sessionExpired) return watchDiaryExpiry(expiresAt, expireSession);
+  }, [expiresAt, expireSession, sessionExpired]);
+
+  useEffect(() => {
+    if (sessionExpired || !(expiresAt > Date.now())) return;
     const controller = new AbortController();
     const { signal } = controller;
+    pendingRequest.current = controller;
 
-    async function fetchMeals() {
+    async function load() {
       try {
-        const res = await fetch(`/api/users/${userId}`, { signal });
-        if (!res.ok) throw new Error("Error en la petición");
-
-        const data = await res.json();
-        const rawMeals = Array.isArray(data.user?.meals) ? data.user.meals : [];
-        if (!signal.aborted) setMeals(rawMeals.filter(Boolean));
+        const result = await readDiary(request.filters, userId, signal);
+        if (signal.aborted) return;
+        if (result === null || !(expiresAt > Date.now())) {
+          expireSession();
+          return;
+        }
+        setDiary(current => current && !signal.aborted ? result : current);
+        setError("");
       } catch {
-        if (!signal.aborted) setError("No se pudieron cargar las comidas");
+        if (signal.aborted) return;
+        if (!(expiresAt > Date.now())) {
+          expireSession();
+          return;
+        }
+        setError("No se pudo actualizar la lista de comidas.");
       } finally {
         if (!signal.aborted) setLoading(false);
       }
     }
 
-    fetchMeals();
+    void load();
     return () => controller.abort();
-  }, [userId]);
+  }, [request, sessionExpired, userId, expiresAt, expireSession]);
 
-  function handleCreated(newMeal: MealLean | undefined) {
-    if (!newMeal || !newMeal._id || !newMeal.reaction) return;
-    setMeals((prev) => [newMeal, ...prev.filter(Boolean)]);
-    setOpenCreate(false);
+  function refresh(filters?: DiaryFilters) {
+    pendingRequest.current?.abort();
+    setRequest(current => ({ filters: filters ?? current.filters }));
   }
 
-  function openEditModal(meal: MealLean) {
-    setSelectedMeal(meal);
-    setOpenEdit(true);
+  function confirmChange(change: DiaryChange) {
+    if (!(expiresAt > Date.now())) {
+      expireSession();
+      return;
+    }
+    setDiary(current => current && {
+      ...current, meals: applyDiaryChange(current.meals, current.filters, change),
+    });
+    refresh();
   }
 
-  function handleUpdated(updated: MealLean) {
-    setMeals((prev) =>
-      prev.map((m) => (m._id === updated._id ? { ...m, ...updated } : m))
+  if (sessionExpired) {
+    return (
+      <div className="p-6">
+        <p role="alert">La sesión ya no está disponible.</p>
+        <Link href="/login" className="underline">Iniciar sesión</Link>
+      </div>
     );
-    setOpenEdit(false);
-    setSelectedMeal(null);
-  }
-
-  function handleDeleted(mealId: string) {
-    setMeals((prev) => prev.filter((m) => m._id !== mealId));
-  }
-
-  const filteredMeals = useMemo(() => {
-    const from = dateFrom ? new Date(dateFrom) : null;
-    const to = dateTo ? new Date(dateTo) : null;
-
-    return [...meals]
-      .filter((m) => {
-        if (reactions.length && !reactions.includes(m.reaction as Reaction))
-          return false;
-
-        if (type && m.type !== type) return false;
-
-        if (from || to) {
-          const md = new Date(m.date);
-          if (from && md < from) return false;
-          if (to) {
-            const toEnd = new Date(to);
-            toEnd.setHours(23, 59, 59, 999);
-            if (md > toEnd) return false;
-          }
-        }
-
-        return true;
-      })
-      .sort((a, b) => {
-        const da = new Date(a.date).getTime();
-        const db = new Date(b.date).getTime();
-        return sortDir === "desc" ? db - da : da - db;
-      });
-  }, [meals, reactions, type, dateFrom, dateTo, sortDir]);
-
-  function toggleReaction(r: Reaction) {
-    setReactions((prev) =>
-      prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]
-    );
-  }
-
-  function clearFilters() {
-    setReactions([]);
-    setType("");
-    setDateFrom("");
-    setDateTo("");
-    setSortDir("desc");
   }
 
   return (
@@ -174,9 +151,9 @@ function AccountMeals({ userId }: { userId: string }) {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => {
-              setOpenFilters(true);
-              console.log("abrir filtros");
+            onClick={event => {
+              event.currentTarget.focus();
+              setDraftFilters(request.filters);
             }}
             className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-gray-100 relative z-20"
             style={{ color: "#473f3f" }}
@@ -224,13 +201,21 @@ function AccountMeals({ userId }: { userId: string }) {
       </div>
 
       {loading && <p style={{ color: "#473f3f" }}>Cargando...</p>}
-      {error && <p className="text-red-500">{error}</p>}
+      {error && (
+        <div className="flex items-baseline gap-3 text-red-700">
+          <p role="alert">{error}</p>
+          <button type="button" onClick={() => refresh()} className="underline">Reintentar</button>
+        </div>
+      )}
 
       <div className="space-y-3 mt-4">
-        {filteredMeals.map((meal) => (
+        {diary.meals.map((meal) => (
           <button
-            key={meal._id}
-            onClick={() => openEditModal(meal)}
+            key={meal.id}
+            onClick={event => {
+              event.currentTarget.focus();
+              setSelectedMeal(meal);
+            }}
             className={`w-full text-left rounded-xl border bg-white px-4 py-3 shadow-sm transition hover:shadow ${
               meal.reaction === "good"
                 ? "border-green-200 bg-green-50"
@@ -243,7 +228,7 @@ function AccountMeals({ userId }: { userId: string }) {
               <div>
                 <p className="font-medium text-gray-800">{meal.name}</p>
                 <p className="text-sm text-gray-500">
-                  {typeLabels[meal.type]} • {formatDate(meal.date)}
+                  {typeLabels[meal.type]} • {formatMealDate(meal.date)}
                 </p>
                 {meal.place && (
                   <p className="text-sm text-gray-400">{meal.place}</p>
@@ -271,7 +256,7 @@ function AccountMeals({ userId }: { userId: string }) {
             </div>
           </button>
         ))}
-        {!loading && !error && filteredMeals.length === 0 && (
+        {!loading && !error && diary.meals.length === 0 && (
           <p className="text-gray-500">
             No hay resultados con los filtros actuales.
           </p>
@@ -280,167 +265,189 @@ function AccountMeals({ userId }: { userId: string }) {
 
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2">
         <button
-          onClick={() => setOpenCreate(true)}
+          ref={createButton}
+          onClick={event => {
+            event.currentTarget.focus();
+            setOpenCreate(true);
+          }}
           className="px-6 py-3 rounded-full bg-green-600 text-white font-semibold shadow-lg hover:bg-green-700 active:bg-green-800 transition"
         >
           + Añadir comida
         </button>
       </div>
 
-      <AddMealModal
-        open={openCreate}
-        onClose={() => setOpenCreate(false)}
-        onCreated={handleCreated}
-        userId={userId}
-      />
+      {openCreate && (
+        <AddMealModal
+          onClose={() => setOpenCreate(false)}
+          onCreated={meal => confirmChange({ meal })}
+          onSessionLost={expireSession}
+          userId={userId}
+        />
+      )}
+      {selectedMeal && (
+        <EditMealModal
+          onClose={() => setSelectedMeal(null)}
+          meal={selectedMeal}
+          fallbackFocus={createButton}
+          userId={userId}
+          onUpdated={({ userId, ...meal }) => confirmChange({
+            meal: { ...meal, user: userId, createdAt: selectedMeal.createdAt },
+          })}
+          onDeleted={id => confirmChange({ id })}
+          onSessionLost={expireSession}
+        />
+      )}
+      {draftFilters && (
+        <DiaryDialog titleId="diary-filter-title" onClose={() => setDraftFilters(null)}>
+          <div className="flex items-center justify-between mb-3">
+            <h2 id="diary-filter-title" className="text-lg font-semibold text-gray-900">Filtros</h2>
+            <button
+              onClick={() => setDraftFilters(null)}
+              className="h-8 w-8 grid place-items-center rounded-full hover:bg-gray-100"
+              aria-label="Cerrar"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
 
-      <EditMealModal
-        open={openEdit}
-        onClose={() => setOpenEdit(false)}
-        meal={selectedMeal}
-        onUpdated={handleUpdated}
-        onDeleted={() => selectedMeal && handleDeleted(selectedMeal._id)}
-      />
-      {openFilters && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setOpenFilters(false)}
-        >
-          <div className="absolute inset-0 bg-black/40" />
-          <div
-            className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 shadow-xl mx-0 sm:mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-gray-900">Filtros</h2>
-              <button
-                onClick={() => setOpenFilters(false)}
-                className="h-8 w-8 grid place-items-center rounded-full hover:bg-gray-100"
-                aria-label="Cerrar"
-              >
-                <XMarkIcon className="h-5 w-5" />
-              </button>
+          <div className="space-y-4">
+            <div>
+              <p id="diary-filter-reaction" className="text-sm font-medium text-gray-700 mb-2">
+                Reacción
+              </p>
+              <div role="group" aria-labelledby="diary-filter-reaction" className="flex flex-wrap gap-2">
+                {(["good", "neutral", "bad"] as Reaction[]).map((r) => {
+                  const active = draftFilters.reactions.includes(r);
+                  const label =
+                    r === "good" ? "Bien" : r === "bad" ? "Mal" : "Neutral";
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setDraftFilters({
+                        ...draftFilters,
+                        reactions: active ? draftFilters.reactions.filter(value => value !== r) : [...draftFilters.reactions, r],
+                      })}
+                      className={`px-3 py-1 rounded-full text-sm border transition ${
+                        active
+                          ? "bg-gray-900 text-white border-gray-900"
+                          : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">
-                  Reacción
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {(["good", "neutral", "bad"] as Reaction[]).map((r) => {
-                    const active = reactions.includes(r);
-                    const label =
-                      r === "good" ? "Bien" : r === "bad" ? "Mal" : "Neutral";
-                    return (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => toggleReaction(r)}
-                        className={`px-3 py-1 rounded-full text-sm border transition ${
-                          active
-                            ? "bg-gray-900 text-white border-gray-900"
-                            : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+            <div>
+              <label htmlFor="diary-filter-type" className="block text-sm font-medium text-gray-700 mb-2">
+                Tipo
+              </label>
+              <select
+                id="diary-filter-type"
+                value={draftFilters.type}
+                onChange={(e) => setDraftFilters({ ...draftFilters, type: e.target.value as MealType | "" })}
+                className="w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="">Todos</option>
+                <option value="breakfast">Desayuno</option>
+                <option value="lunch">Comida</option>
+                <option value="dinner">Cena</option>
+                <option value="snack">Snack</option>
+              </select>
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tipo
+                <label htmlFor="diary-filter-desde" className="block text-sm font-medium text-gray-700">
+                  Desde
                 </label>
-                <select
-                  value={type}
-                  onChange={(e) => setType(e.target.value as MealType | "")}
-                  className="w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
+                <input
+                  type="date"
+                  id="diary-filter-desde"
+                  value={draftFilters.dateFrom}
+                  aria-invalid={Boolean(rangeError)}
+                  aria-describedby={rangeError ? "diary-filter-date-error" : undefined}
+                  onChange={(e) => setDraftFilters({ ...draftFilters, dateFrom: e.target.value })}
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="diary-filter-hasta" className="block text-sm font-medium text-gray-700">
+                  Hasta
+                </label>
+                <input
+                  type="date"
+                  id="diary-filter-hasta"
+                  value={draftFilters.dateTo}
+                  aria-invalid={Boolean(rangeError)}
+                  aria-describedby={rangeError ? "diary-filter-date-error" : undefined}
+                  onChange={(e) => setDraftFilters({ ...draftFilters, dateTo: e.target.value })}
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+            </div>
+
+            {rangeError && <p id="diary-filter-date-error" role="alert" className="text-sm text-red-700">{rangeError}</p>}
+
+            <div>
+              <p id="diary-filter-order" className="block text-sm font-medium text-gray-700 mb-2">
+                Orden por fecha
+              </p>
+              <div role="group" aria-labelledby="diary-filter-order" className="flex gap-2">
+                <button
+                  type="button"
+                  aria-pressed={draftFilters.sortDir === "desc"}
+                  onClick={() => setDraftFilters({ ...draftFilters, sortDir: "desc" })}
+                  className={`px-3 py-1 rounded-lg border text-sm ${
+                    draftFilters.sortDir === "desc"
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
+                  }`}
                 >
-                  <option value="">Todos</option>
-                  <option value="breakfast">Desayuno</option>
-                  <option value="lunch">Comida</option>
-                  <option value="dinner">Cena</option>
-                  <option value="snack">Snack</option>
-                </select>
+                  Más nuevas
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={draftFilters.sortDir === "asc"}
+                  onClick={() => setDraftFilters({ ...draftFilters, sortDir: "asc" })}
+                  className={`px-3 py-1 rounded-lg border text-sm ${
+                    draftFilters.sortDir === "asc"
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  Más antiguas
+                </button>
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Desde
-                  </label>
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Hasta
-                  </label>
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Orden por fecha
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSortDir("desc")}
-                    className={`px-3 py-1 rounded-lg border text-sm ${
-                      sortDir === "desc"
-                        ? "bg-gray-900 text-white border-gray-900"
-                        : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    Más nuevas
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSortDir("asc")}
-                    className={`px-3 py-1 rounded-lg border text-sm ${
-                      sortDir === "asc"
-                        ? "bg-gray-900 text-white border-gray-900"
-                        : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    Más antiguas
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5 flex items-center justify-between">
-              <button
-                onClick={clearFilters}
-                className="text-sm text-gray-600 underline decoration-dotted hover:text-gray-800"
-              >
-                Limpiar filtros
-              </button>
-              <button
-                onClick={() => setOpenFilters(false)}
-                className="px-4 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 active:bg-green-800"
-              >
-                Aplicar
-              </button>
             </div>
           </div>
-        </div>
+
+          <div className="mt-5 flex items-center justify-between">
+            <button
+              onClick={() => {
+                setDraftFilters(defaultDiaryFilters);
+                refresh(defaultDiaryFilters);
+              }}
+              className="text-sm text-gray-600 underline decoration-dotted hover:text-gray-800"
+            >
+              Limpiar filtros
+            </button>
+            <button
+              disabled={Boolean(rangeError)}
+              onClick={() => {
+                refresh(draftFilters);
+                setDraftFilters(null);
+              }}
+              className="px-4 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 active:bg-green-800 disabled:opacity-60"
+            >
+              Aplicar
+            </button>
+          </div>
+        </DiaryDialog>
       )}
     </div>
   );

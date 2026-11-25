@@ -4,142 +4,90 @@ import { Meal, serializeMeal } from "@/server/persistence/meal";
 import { requireSession, isAdmin, forbid } from "@/lib/authz";
 import { updateMealSchema } from "@/lib/validations";
 import { isValidObjectId } from "mongoose";
+import type { Session } from "next-auth";
+import { apiError, dataError, readJson } from "@/server/http-errors";
+import { checkMealMutation } from "@/server/meal-mutation";
+import type { EditedMeal } from "@/shared/meal";
 
-const ALLOWED_FIELDS = new Set([
-  "name",
-  "date",
-  "type",
-  "reaction",
-  "place",
-  "notes",
-]);
+function mealNotFound() {
+  return apiError(404, "MEAL_NOT_FOUND", "Comida no encontrada");
+}
+
+async function accessibleMeal(id: string, session: Session) {
+  if (!isValidObjectId(id)) return { error: apiError(400, "INVALID_INPUT", "Identificador no válido") };
+  await dbConnect();
+  const meal = await Meal.findById(id).lean();
+  if (!meal) return { error: mealNotFound() };
+  if (meal.userId.toString() !== session.user?.id && !isAdmin(session)) return { error: forbid() };
+  return { meal };
+}
 
 export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
-  const { session, error } = await requireSession();
-  if (error) return error;
+  try {
+    const { session, error } = await requireSession();
+    if (error) return error;
+    const mutationError = checkMealMutation(req, session.user!.id);
+    if (mutationError) return mutationError;
 
-  const { id } = await context.params;
+    const { id } = await context.params;
+    const result = await accessibleMeal(id, session);
+    if (result.error) return result.error;
 
-  if (!isValidObjectId(id)) {
-    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+    const parsed = updateMealSchema.safeParse(await readJson(req));
+    if (!parsed.success) return apiError(400, "INVALID_INPUT", "Datos no válidos");
+
+    const updated = await Meal.findOneAndUpdate(
+      { _id: id, userId: result.meal.userId },
+      { $set: parsed.data },
+      { returnDocument: "after", runValidators: true }
+    ).lean();
+    if (!updated) return mealNotFound();
+
+    const meal: EditedMeal = {
+      id: updated._id.toString(),
+      userId: updated.userId.toString(),
+      name: updated.name,
+      date: updated.date,
+      type: updated.type,
+      reaction: updated.reaction,
+      place: updated.place ?? null,
+      notes: updated.notes ?? null,
+    };
+    return NextResponse.json({ meal });
+  } catch (error) {
+    return dataError(error);
   }
-
-  await dbConnect();
-
-  const existing = await Meal.findById(id);
-  if (!existing) {
-    return NextResponse.json({ error: "Meal not found" }, { status: 404 });
-  }
-
-  const isSelf = session.user?.id === existing.userId?.toString();
-  if (!isAdmin(session) && !isSelf) {
-    return forbid();
-  }
-
-  const body = await req.json().catch(() => ({}));
-  if ("userId" in body) delete body.userId;
-
-  const sanitized: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(body)) {
-    if (ALLOWED_FIELDS.has(k)) sanitized[k] = v;
-  }
-
-  const parsed = updateMealSchema.safeParse(sanitized);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { errors: parsed.error.flatten() },
-      { status: 400 }
-    );
-  }
-
-  const updated = await Meal.findByIdAndUpdate(
-    id,
-    { $set: parsed.data },
-    { returnDocument: "after", runValidators: true }
-  ).lean();
-
-  if (!updated) {
-    return NextResponse.json({ error: "Meal not found" }, { status: 404 });
-  }
-
-  const publicMeal = serializeMeal(updated);
-  return NextResponse.json(
-    {
-      meal: {
-        id: publicMeal._id.toString(),
-        name: publicMeal.name,
-        date: publicMeal.date,
-        type: publicMeal.type,
-        reaction: publicMeal.reaction,
-        place: publicMeal.place ?? null,
-        notes: publicMeal.notes ?? null,
-        userId: publicMeal.userId?.toString() ?? null,
-      },
-    },
-    { status: 200 }
-  );
 }
 
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
-  const { id } = await context.params;
-
-  const { session, error } = await requireSession();
-  if (error) return error;
-
-  await dbConnect();
-  const existing = await Meal.findById(id);
-
-  if (!existing) {
-    return NextResponse.json({ error: "Meal not found" }, { status: 404 });
-  }
-
-  const isSelf = session.user?.id === existing.userId?.toString();
-  if (!isAdmin(session) && !isSelf) {
-    return forbid();
-  }
-
   try {
+    const { session, error } = await requireSession();
+    if (error) return error;
+    const mutationError = checkMealMutation(req, session.user!.id);
+    if (mutationError) return mutationError;
 
-    const deleted = await Meal.findByIdAndDelete(id).lean();
+    const { id } = await context.params;
+    const result = await accessibleMeal(id, session);
+    if (result.error) return result.error;
 
-    if (!deleted) {
-      return NextResponse.json(
-        { error: "Meal no encontrado" },
-        { status: 404 }
-      );
-    }
+    const { deletedCount } = await Meal.deleteOne({ _id: id, userId: result.meal.userId });
+    if (!deletedCount) return mealNotFound();
 
-    return NextResponse.json({ message: "Meal eliminado" }, { status: 200 });
-  } catch {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ message: "Meal eliminado" });
+  } catch (error) {
+    return dataError(error);
   }
 }
 
-export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
-  const { session, error } = await requireSession();
-  if (error) return error;
-
-  const { id } = await context.params;
-
+export async function GET(_req: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    await dbConnect();
-
-    if (!isValidObjectId(id)) {
-      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
-    }
-
-    const meal = await Meal.findById(id);
-
-    if (!meal) {
-      return NextResponse.json({ error: "Meal not found" }, { status: 404 });
-    }
-
-    const isSelf = session.user?.id === meal.userId.toString();
-
-    if (!isAdmin(session) && !isSelf) return forbid();
-
-    return NextResponse.json({ meal: serializeMeal(meal) }, { status: 200 });
-  } catch {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    const { session, error } = await requireSession();
+    if (error) return error;
+    const { id } = await context.params;
+    const result = await accessibleMeal(id, session);
+    if (result.error) return result.error;
+    return NextResponse.json({ meal: serializeMeal(result.meal) });
+  } catch (error) {
+    return dataError(error);
   }
 }

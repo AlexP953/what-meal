@@ -1,6 +1,6 @@
 import "server-only";
 import { Schema, model, models, type Model, type Types } from "mongoose";
-import { isCivilDate, mealTypes, mealReactions, type MealType, type MealReaction, type PublicMeal } from "@/shared/meal";
+import { isCivilDate, mealTypes, mealReactions, type MealType, type MealReaction, type PublicMeal, type ListedMeal } from "@/shared/meal";
 
 export interface MealRecord {
   _id: Types.ObjectId;
@@ -22,6 +22,11 @@ export function serializeMeal(meal: MealRecord): PublicMeal {
     place: meal.place, notes: meal.notes,
     createdAt: meal.createdAt.toISOString(), updatedAt: meal.updatedAt.toISOString(),
   };
+}
+
+export function serializeListedMeal(record: MealRecord): ListedMeal {
+  const { _id: id, userId, place, notes, ...meal } = serializeMeal(record);
+  return { ...meal, id, user: userId, place: place ?? null, notes: notes ?? null };
 }
 
 const mealSchema = new Schema<MealRecord>({
