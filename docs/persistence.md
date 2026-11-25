@@ -358,3 +358,48 @@ de recuperación de la instalación. Comprueba periódicamente la restauración
 antes de retirar copias antiguas.
 
 [Opciones de mongodump](https://www.mongodb.com/docs/database-tools/mongodump/).
+
+### Ensayo de restauración
+
+Usa una copia con datos ficticios, la revisión del despliegue que la creó y un
+directorio privado y cifrado con espacio para el archivo y el volumen restaurado.
+Elige una ruta nueva fuera de la copia. El comando verifica las sumas y la
+versión exacta de MongoDB. Crea un proyecto Compose con una red, un volumen y
+secretos propios. Solo restaura la base `whatmeal` y conserva sus índices.
+
+```bash
+workspace="$HOME/ensayo-restauracion"
+bash scripts/restore-deploy.sh /ruta/a/la/copia-publicada "$workspace"
+test -f "$workspace/restore-complete"
+export AUTH_URL=https://localhost
+export WHATMEAL_SECRETS_DIR="$workspace/secrets"
+project=$(cat "$workspace/project-name")
+docker compose -p "$project" -f compose.deploy.yml up -d --wait whatmeal
+```
+
+La aplicación de ensayo queda en la red privada. Para comprobarla desde un
+cliente HTTPS, conecta un proxy de ensayo aislado a esa red. Usa un origen
+distinto del despliegue principal y configura el mismo `AUTH_URL` en la
+aplicación y el proxy. En una máquina de ensayo también puedes usar Caddy con
+`https://localhost` y una configuración Compose que limite sus puertos a
+`127.0.0.1`. Confía en la autoridad local solo en el cliente de ensayo.
+Ejecuta el modo `read` de la prueba del diario con el archivo privado creado
+antes de la copia. Comprueba el inicio de sesión y que la comida conserva su
+identificador, propietario, fecha y contenido. Compara los índices de las
+colecciones con los del origen. El origen puede seguir en funcionamiento.
+
+El comando devuelve un error si faltan archivos, las sumas no coinciden, la
+versión difiere o MongoDB rechaza el archivo. Usa el marcador
+`restore-complete` para identificar un ensayo terminado. Al acabar, elimina
+solo los recursos del proyecto de ensayo mediante los comandos siguientes.
+
+```bash
+test -f "$workspace/restore-complete" &&
+  docker compose -p "$project" -f compose.deploy.yml down --volumes
+```
+
+Borra después el directorio de ensayo y su archivo privado de prueba. Si una
+interrupción deja recursos sin el marcador, consulta el proyecto indicado en
+`project-name` y elimina solo sus recursos antes de repetir el ensayo.
+
+[Compatibilidad de mongorestore](https://www.mongodb.com/docs/database-tools/mongorestore/mongorestore-behavior-access-usage/).

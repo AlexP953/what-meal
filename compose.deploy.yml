@@ -105,6 +105,18 @@ services:
     logging:
       driver: none
 
+  mongo-restore:
+    image: *mongo-image
+    profiles: [operations]
+    entrypoint: ["bash", "/opt/deploy/mongo-restore.sh"]
+    secrets:
+      - mongo_root_password
+    volumes:
+      - ./deploy/mongo-restore.sh:/opt/deploy/mongo-restore.sh:ro
+    networks: [database]
+    logging:
+      driver: none
+
 secrets:
   auth_secret:
     file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/auth-secret
