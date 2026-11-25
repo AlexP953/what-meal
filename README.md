@@ -299,6 +299,8 @@ Android, conecta el dispositivo mediante ADB o inicia el emulador. Ejecuta
 `http://localhost:3000/login` en Chrome para Android y repite el recorrido con tacto.
 El diario usa Web Locks para coordinar los cambios de sesión entre pestañas.
 Usa HTTPS al acceder desde otro equipo y localhost para el desarrollo local.
+Si otra pestaña intenta iniciar sesión, el diario se oculta hasta comprobar la
+sesión. Si sigue vigente la misma sesión, vuelve el formulario con su borrador.
 Con el teclado en pantalla abierto, enfoca Notas y desplaza el formulario hasta
 la acción de guardar. Activa TalkBack para comprobar las etiquetas, los títulos
 de los diálogos y los avisos de carga, error y confirmación.

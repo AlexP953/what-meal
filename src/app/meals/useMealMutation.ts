@@ -2,16 +2,17 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { mutateMeal } from "./mutation-client";
 import type { DiaryChange } from "./diary-client";
 
-export default function useMealMutation(userId: string, onConfirmed: (change: DiaryChange) => void, onSessionLost: () => void, onStart: () => void) {
+export default function useMealMutation(userId: string, onConfirmed: (change: DiaryChange) => void, onSessionLost: () => void, onStart: () => void, initialUncertain = false) {
   const pending = useRef<AbortController>(null);
+  const uncertainRef = useRef(initialUncertain);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [uncertain, setUncertain] = useState(false);
+  const [uncertain, setUncertain] = useState(initialUncertain);
 
   useLayoutEffect(() => () => pending.current?.abort(), []);
 
   async function submit(operation: Parameters<typeof mutateMeal>[0]) {
-    if (pending.current || uncertain) return;
+    if (pending.current || uncertainRef.current) return;
     const controller = new AbortController();
     pending.current = controller;
     onStart();
@@ -28,6 +29,7 @@ export default function useMealMutation(userId: string, onConfirmed: (change: Di
     } else if (result.status === "rejected") {
       setError(result.error);
     } else if (result.status === "uncertain") {
+      uncertainRef.current = true;
       setUncertain(true);
     }
 
@@ -35,5 +37,5 @@ export default function useMealMutation(userId: string, onConfirmed: (change: Di
     setSubmitting(false);
   }
 
-  return { submit, submitting, error, setError, uncertain };
+  return { submit, submitting, error, setError, uncertain, pending, uncertainRef };
 }

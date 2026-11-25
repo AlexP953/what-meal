@@ -6,14 +6,17 @@ import { XMarkIcon } from "@heroicons/react/24/outline";
 import DiaryDialog from "./DiaryDialog";
 import MealFields from "./MealFields";
 import type { DiaryChange, DiaryMeal } from "./diary-client";
-import { readMealFields } from "./mutation-client";
+import type { DiaryDraft, MealDraft } from "./diary-draft";
+import { readMealDraft, readMealFields } from "./mutation-client";
 import useMealMutation from "./useMealMutation";
 
 const missingName = "Escribe el nombre de la comida.";
 const invalidDate = "Introduce una fecha válida con un año de cuatro cifras.";
 
-export default function MealFormDialog({ meal, onClose, onConfirmed, fallbackFocus, onCheckDiary, onSessionLost, onStart, userId }: {
+export default function MealFormDialog({ meal, initialDraft, captureRef, onClose, onConfirmed, fallbackFocus, onCheckDiary, onSessionLost, onStart, userId }: {
   meal?: DiaryMeal;
+  initialDraft?: MealDraft;
+  captureRef: RefObject<(() => DiaryDraft) | null>;
   onClose: () => void;
   onConfirmed: (change: DiaryChange, message: string) => void;
   fallbackFocus: RefObject<HTMLButtonElement | null>;
@@ -22,15 +25,31 @@ export default function MealFormDialog({ meal, onClose, onConfirmed, fallbackFoc
   onStart: () => void;
   userId: string;
 }) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(initialDraft?.confirmDelete ?? false);
+  const form = useRef<HTMLFormElement>(null);
   const deleteButton = useRef<HTMLButtonElement>(null);
   const cancelDelete = useRef<HTMLButtonElement>(null);
   const restoreDeleteFocus = useRef(false);
-  const { submit, submitting, error, setError, uncertain } = useMealMutation(userId, change => {
+  const { submit, submitting, error, setError, uncertain, pending, uncertainRef } = useMealMutation(userId, change => {
     const message = "id" in change ? "Comida eliminada." : meal ? "Cambios guardados." : "Comida añadida.";
+    captureRef.current = null;
     onConfirmed(change, message);
     onClose();
-  }, onSessionLost, onStart);
+  }, () => {
+    captureRef.current = null;
+    onSessionLost();
+  }, onStart, initialDraft?.uncertain);
+
+  useLayoutEffect(() => {
+    const element = form.current;
+    if (!element) return;
+    captureRef.current = () => ({
+      kind: "meal", meal, values: readMealDraft(element), confirmDelete,
+      // An interrupted request may have committed before its response was discarded.
+      uncertain: uncertainRef.current || pending.current !== null,
+    });
+    return () => { captureRef.current = null; };
+  }, [captureRef, meal, confirmDelete, uncertainRef, pending]);
 
   useLayoutEffect(() => {
     if (confirmDelete) cancelDelete.current?.focus();
@@ -65,7 +84,7 @@ export default function MealFormDialog({ meal, onClose, onConfirmed, fallbackFoc
         </button>
       </header>
 
-      <form noValidate className={confirmDelete ? "hidden" : "app-form"} aria-busy={submitting} aria-describedby={error && !confirmDelete ? "meal-form-error" : undefined}
+      <form ref={form} noValidate className={confirmDelete ? "hidden" : "app-form"} aria-busy={submitting} aria-describedby={error && !confirmDelete ? "meal-form-error" : undefined}
         onSubmit={event => {
           event.preventDefault();
           if (confirmDelete || submitting || uncertain) return;
@@ -83,7 +102,7 @@ export default function MealFormDialog({ meal, onClose, onConfirmed, fallbackFoc
           void submit(meal ? { method: "PATCH", meal, fields } : { method: "POST", fields });
         }}>
         <fieldset disabled={submitting} className="grid min-w-0 gap-4">
-          <MealFields meal={meal} nameInvalid={error === missingName} dateInvalid={error === invalidDate} />
+          <MealFields meal={meal} values={initialDraft?.values} nameInvalid={error === missingName} dateInvalid={error === invalidDate} />
         </fieldset>
         {!confirmDelete && error && <p id="meal-form-error" role="alert" className="app-feedback app-error">{error}</p>}
         {!confirmDelete && uncertain && <p role="alert" className="app-feedback app-error">{uncertainMessage}</p>}

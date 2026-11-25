@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { holdDiaryLock, postAuth, readSession } from "@/app/session-client";
+import { holdDiaryLock, postAuth, readSession, sameSession } from "@/app/session-client";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -15,7 +15,7 @@ it("invalidates other tabs before posting credentials even when the response is 
       return Promise.reject(lost);
     }));
   await expect(postAuth("callback/credentials", new URLSearchParams())).rejects.toBe(lost);
-  expect(channel.postMessage).toHaveBeenCalledTimes(2);
+  expect(channel.postMessage).toHaveBeenCalledTimes(1);
 });
 
 it("distinguishes temporary session verification failure from an absent cookie", async () => {
@@ -64,4 +64,86 @@ it("keeps the diary closed when the browser cannot coordinate cookie changes", a
   const work = vi.fn();
   await expect(holdDiaryLock(new AbortController().signal, work)).rejects.toThrow("Web Locks unavailable");
   expect(work).not.toHaveBeenCalled();
+});
+
+
+it("keeps new diary verifications queued until the authentication request settles", async () => {
+  const posting = Promise.withResolvers<void>();
+  const response = Promise.withResolvers<Response>();
+  vi.stubGlobal("fetch", vi.fn()
+    .mockResolvedValueOnce(Response.json({ csrfToken: "test-csrf" }))
+    .mockImplementationOnce(() => {
+      posting.resolve();
+      return response.promise;
+    }));
+  const auth = postAuth("callback/credentials", new URLSearchParams());
+  await posting.promise;
+  const verify = vi.fn(async () => {});
+  const diary = holdDiaryLock(new AbortController().signal, verify);
+  try {
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(verify).not.toHaveBeenCalled();
+  } finally {
+    response.resolve(Response.json({ url: "http://localhost/login?error=CredentialsSignin" }));
+    await auth;
+    await diary;
+  }
+  expect(verify).toHaveBeenCalledOnce();
+});
+
+it("restores a draft only for the same account and the same signed session", () => {
+  const original = { status: "verified", userId: "account-1", expiresAt: 1 } as const;
+  expect(sameSession(original, { ...original })).toBe(true);
+  expect(sameSession(original, { ...original, userId: "account-2" })).toBe(false);
+  expect(sameSession(original, { ...original, expiresAt: 2 })).toBe(false);
+});
+
+it("cancels a queued authentication at its deadline without sending a request", async () => {
+  const holding = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const diary = holdDiaryLock(new AbortController().signal, async () => {
+    holding.resolve();
+    await release.promise;
+  });
+  await holding.promise;
+
+  const deadline = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValueOnce(deadline.signal);
+  const fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+  const auth = postAuth("signout", new URLSearchParams());
+  try {
+    deadline.abort();
+    await expect(auth).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetcher).not.toHaveBeenCalled();
+  } finally {
+    timeout.mockRestore();
+    release.resolve();
+    await diary;
+  }
+});
+
+it("aborts a stalled request and lets the diary verify again", async () => {
+  const request = Promise.withResolvers<void>();
+  const deadline = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, "timeout")
+    .mockReturnValueOnce(new AbortController().signal)
+    .mockReturnValueOnce(deadline.signal);
+  vi.stubGlobal("fetch", vi.fn().mockImplementation((_path, { signal }: RequestInit) => {
+    request.resolve();
+    return new Promise<Response>((_resolve, reject) => {
+      signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
+  }));
+  try {
+    const auth = postAuth("callback/credentials", new URLSearchParams());
+    await request.promise;
+    deadline.abort();
+    await expect(auth).rejects.toMatchObject({ name: "AbortError" });
+    const verify = vi.fn(async () => {});
+    await holdDiaryLock(new AbortController().signal, verify);
+    expect(verify).toHaveBeenCalledOnce();
+  } finally {
+    timeout.mockRestore();
+  }
 });

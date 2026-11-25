@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import Link from "next/link";
 import { flushSync } from "react-dom";
 import MealFormDialog from "./MealFormDialog";
@@ -11,14 +11,20 @@ import {
   type DiaryChange, type DiaryFilters, type DiaryMeal, type DiarySnapshot,
 } from "./diary-client";
 import { FunnelIcon, Bars3Icon, PlusIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
-import { holdDiaryLock, postAuth, readSession, watchSessionChange, type SessionCheck } from "../session-client";
+import type { DiaryDraft, MealDraft } from "./diary-draft";
+import { holdDiaryLock, postAuth, readSession, sameSession, watchSessionChange, type SessionCheck, type VerifiedSession } from "../session-client";
 import SessionUnavailable from "./SessionUnavailable";
 import AccessScreen from "../components/AccessScreen";
 import { notificationsEnabled } from "@/shared/config";
 import EnableNotifications from "../components/EnableNotifications";
 
+type SessionDraft = { session: VerifiedSession; draft?: DiaryDraft };
+
 export default function MealsPage() {
-  const [session, setSession] = useState<SessionCheck>();
+  const [{ session, draft }, setView] = useState<{ session?: SessionCheck; draft?: DiaryDraft }>({});
+  const committedView = useRef<(() => SessionDraft) | null>(null);
+  const saved = useRef<SessionDraft>(undefined);
+  const seenAuthAttempts = useRef(new Set<string>());
   const [attempt, setAttempt] = useState(0);
   const releaseDiary = useRef<() => void>(undefined);
 
@@ -35,22 +41,41 @@ export default function MealsPage() {
       if (!holdingLock || checking || signal.aborted) return;
       checking = true;
       const result = await readSession(signal);
-      if (!signal.aborted) setSession(result);
       checking = false;
+      if (signal.aborted) return;
+
+      const previous = saved.current;
+      if (result.status === "verified" && previous) {
+        if (sameSession(previous.session, result)) {
+          flushSync(() => setView({ session: result, draft: previous.draft }));
+        } else {
+          setView({ session: { status: "absent" } });
+          lifetime.abort();
+        }
+      } else {
+        setView({ session: result });
+      }
+      if (result.status !== "unavailable") saved.current = undefined;
     }
 
-    function invalidate() {
-      if (signal.aborted && !suspended) return;
-      suspended = false;
-      flushSync(() => setSession({ status: "absent" }));
+    function hide() {
+      saved.current = committedView.current?.() ?? saved.current;
+      flushSync(() => setView({}));
       lifetime.abort();
+    }
+
+    function invalidate(authAttempt: string) {
+      if (seenAuthAttempts.current.has(authAttempt) || (signal.aborted && !suspended)) return;
+      seenAuthAttempts.current.add(authAttempt);
+      if (suspended) return;
+      hide();
+      setAttempt(value => value + 1);
     }
 
     function suspend() {
       if (signal.aborted) return;
       suspended = true;
-      flushSync(() => setSession(undefined));
-      lifetime.abort();
+      hide();
     }
 
     function verifyVisible() {
@@ -77,7 +102,7 @@ export default function MealsPage() {
       await verify();
       await released;
     }).catch(() => {
-      if (!signal.aborted) setSession({ status: navigator.locks ? "unavailable" : "unsupported" });
+      if (!signal.aborted) setView({ session: { status: navigator.locks ? "unavailable" : "unsupported" } });
     });
 
     return () => {
@@ -99,14 +124,15 @@ export default function MealsPage() {
     </AccessScreen>
   );
   if (session.status === "unavailable") return <SessionUnavailable retry={() => {
-    setSession(undefined);
+    setView({});
     setAttempt(value => value + 1);
   }} />;
   if (session.status !== "verified") return <SessionLost />;
   return <AccountMeals
     key={`${session.userId}:${session.expiresAt}`}
-    userId={session.userId}
-    expiresAt={session.expiresAt}
+    session={session}
+    initialDraft={draft}
+    captureRef={committedView}
     onSignOut={() => releaseDiary.current?.()}
   />;
 }
@@ -125,7 +151,18 @@ function SessionLost() {
   );
 }
 
-function AccountMeals({ userId, expiresAt, onSignOut }: { userId: string; expiresAt: number; onSignOut: () => void }) {
+function AccountMeals({ session, initialDraft, captureRef, onSignOut }: {
+  session: VerifiedSession;
+  initialDraft?: DiaryDraft;
+  captureRef: RefObject<(() => SessionDraft) | null>;
+  onSignOut: () => void;
+}) {
+  const { userId, expiresAt } = session;
+  const captureDialog = useRef<(() => DiaryDraft) | null>(null);
+  useLayoutEffect(() => {
+    captureRef.current = () => ({ session, draft: captureDialog.current?.() });
+    return () => { captureRef.current = null; };
+  }, [captureRef, session]);
   const [diary, setDiary] = useState<DiarySnapshot | null>();
   const [loading, setLoading] = useState(true);
   const [reviewingMutation, setReviewingMutation] = useState(false);
@@ -141,8 +178,10 @@ function AccountMeals({ userId, expiresAt, onSignOut }: { userId: string; expire
   const filterButton = useRef<HTMLButtonElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
 
-  const [mealForm, setMealForm] = useState<DiaryMeal | "create">();
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [mealForm, setMealForm] = useState<{ meal?: DiaryMeal; restored?: MealDraft } | undefined>(
+    initialDraft?.kind === "meal" ? { meal: initialDraft.meal, restored: initialDraft } : undefined,
+  );
+  const [filterDraft, setFilterDraft] = useState(initialDraft?.kind === "filters" ? initialDraft.filters : undefined);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -164,7 +203,7 @@ function AccountMeals({ userId, expiresAt, onSignOut }: { userId: string; expire
     pendingRequest.current?.abort();
     setDiary(null);
     setMealForm(undefined);
-    setFiltersOpen(false);
+    setFilterDraft(undefined);
   }, []);
 
   async function closeSession() {
@@ -176,11 +215,11 @@ function AccountMeals({ userId, expiresAt, onSignOut }: { userId: string; expire
     });
     onSignOut();
     try {
-      const response = await postAuth("signout", new URLSearchParams({ callbackUrl: "/login" }), async reply => {
+      const response = await postAuth("signout", new URLSearchParams({ callbackUrl: "/login" }), async (reply, signal) => {
         if (!reply.ok) throw new Error("Sign-out failed");
         const { url } = await reply.json();
         if (typeof url !== "string" || new URL(url).pathname !== "/login") throw new Error("Sign-out failed");
-        if ((await readSession()).status !== "absent") throw new Error("Sign-out failed");
+        if ((await readSession(signal)).status !== "absent") throw new Error("Sign-out failed");
       });
       if (!response) throw new Error("Sign-out failed");
       window.location.replace("/login");
@@ -322,7 +361,7 @@ function AccountMeals({ userId, expiresAt, onSignOut }: { userId: string; expire
             <button ref={createButton} className="app-button app-button-primary shrink-0" aria-disabled={reviewingMutation} onClick={event => {
               if (reviewingMutation) return;
               event.currentTarget.focus();
-              setMealForm("create");
+              setMealForm({});
             }}>
               <PlusIcon aria-hidden="true" className="h-5 w-5" />
               Añadir comida
@@ -358,7 +397,7 @@ function AccountMeals({ userId, expiresAt, onSignOut }: { userId: string; expire
               onClick={event => {
                 if (reviewingMutation) return;
                 event.currentTarget.focus();
-                setFiltersOpen(true);
+                setFilterDraft(request.filters);
               }}
               className="app-button"
             >
@@ -383,7 +422,7 @@ function AccountMeals({ userId, expiresAt, onSignOut }: { userId: string; expire
                   onClick={event => {
                     if (reviewingMutation) return;
                     event.currentTarget.focus();
-                    setMealForm(meal);
+                    setMealForm({ meal });
                   }}
                 >
                   <span className="min-w-0">
@@ -415,7 +454,9 @@ function AccountMeals({ userId, expiresAt, onSignOut }: { userId: string; expire
 
       {mealForm && (
         <MealFormDialog
-          meal={mealForm === "create" ? undefined : mealForm}
+          meal={mealForm.meal}
+          initialDraft={mealForm.restored}
+          captureRef={captureDialog}
           onClose={() => setMealForm(undefined)}
           fallbackFocus={createButton}
           userId={userId}
@@ -425,10 +466,10 @@ function AccountMeals({ userId, expiresAt, onSignOut }: { userId: string; expire
           onSessionLost={expireSession}
         />
       )}
-      {filtersOpen && (
-        <DiaryFiltersDialog filters={request.filters} onClose={() => setFiltersOpen(false)} onApply={next => {
+      {filterDraft && (
+        <DiaryFiltersDialog filters={filterDraft} captureRef={captureDialog} onClose={() => setFilterDraft(undefined)} onApply={next => {
           refresh(next);
-          setFiltersOpen(false);
+          setFilterDraft(undefined);
         }} />
       )}
     </main>

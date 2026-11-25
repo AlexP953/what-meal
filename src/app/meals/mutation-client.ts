@@ -1,7 +1,7 @@
 import { EXPECTED_MEAL_ACCOUNT_HEADER, isCivilDate, mealReactions, mealTypes, type MealReaction, type MealType } from "@/shared/meal";
 import { isDiarySessionLost, type DiaryChange, type DiaryMeal } from "./diary-client";
 
-type MealFields = {
+export type MealFieldValues = {
   name: string;
   date: string;
   type: MealType;
@@ -11,8 +11,8 @@ type MealFields = {
 };
 
 type MealOperation =
-  | { method: "POST"; fields: MealFields }
-  | { method: "PATCH"; fields: MealFields; meal: DiaryMeal }
+  | { method: "POST"; fields: MealFieldValues }
+  | { method: "PATCH"; fields: MealFieldValues; meal: DiaryMeal }
   | { method: "DELETE"; meal: DiaryMeal };
 
 type MutationResult =
@@ -20,7 +20,7 @@ type MutationResult =
   | { status: "rejected"; error: string }
   | { status: "session-lost" | "uncertain" | "aborted" };
 
-function isMealFields(value: Partial<Omit<MealFields, "place" | "notes"> & { place: string | null; notes: string | null }>) {
+function isMealFields(value: Partial<Omit<MealFieldValues, "place" | "notes"> & { place: string | null; notes: string | null }>) {
   return typeof value.name === "string" && Boolean(value.name.trim()) &&
     typeof value.date === "string" && isCivilDate(value.date) &&
     value.type !== undefined && mealTypes.includes(value.type) &&
@@ -84,14 +84,20 @@ export async function mutateMeal(operation: MealOperation, userId: string, signa
   }
 }
 
-export function readMealFields(form: HTMLFormElement): MealFields {
-  const data = new FormData(form);
+export function readMealDraft(form: HTMLFormElement): MealFieldValues {
+  const value = (name: keyof MealFieldValues) =>
+    (form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null)?.value ?? "";
   return {
-    name: String(data.get("name") ?? "").trim(),
-    date: String(data.get("date") ?? ""),
-    type: data.get("type") as MealType,
-    reaction: data.get("reaction") as MealReaction,
-    place: String(data.get("place") ?? "").trim(),
-    notes: String(data.get("notes") ?? "").trim(),
+    name: value("name"),
+    date: value("date"),
+    type: value("type") as MealType,
+    reaction: value("reaction") as MealReaction,
+    place: value("place"),
+    notes: value("notes"),
   };
+}
+
+export function readMealFields(form: HTMLFormElement): MealFieldValues {
+  const values = readMealDraft(form);
+  return { ...values, name: values.name.trim(), place: values.place.trim(), notes: values.notes.trim() };
 }

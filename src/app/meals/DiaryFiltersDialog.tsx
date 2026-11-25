@@ -1,16 +1,23 @@
-import { useState } from "react";
+import { useLayoutEffect, useState, type RefObject } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { mealReactions, mealTypes, type MealType } from "@/shared/meal";
+import type { DiaryDraft } from "./diary-draft";
 import DiaryDialog from "./DiaryDialog";
 import { dateRangeError, defaultDiaryFilters, type DiaryFilters } from "./diary-client";
 import { reactionLabels, typeLabels } from "./labels";
 
-export default function DiaryFiltersDialog({ filters, onClose, onApply }: {
+export default function DiaryFiltersDialog({ filters, captureRef, onClose, onApply }: {
   filters: DiaryFilters;
+  captureRef: RefObject<(() => DiaryDraft) | null>;
   onClose: () => void;
   onApply: (filters: DiaryFilters) => void;
 }) {
   const [draft, setDraft] = useState(filters);
+  useLayoutEffect(() => {
+    captureRef.current = () => ({ kind: "filters", filters: draft });
+    return () => { captureRef.current = null; };
+  }, [captureRef, draft]);
+
   const rangeError = dateRangeError(draft.dateFrom, draft.dateTo);
 
   return (
