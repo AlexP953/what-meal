@@ -1,0 +1,51 @@
+name: whatmeal-deploy
+
+x-mongo-image: &mongo-image mongo:8.0.38@sha256:479e85ced54ffb8a40dade1dcde2da2a9ae858515b9415e9cc54bfb8f0575d01
+
+services:
+  mongo:
+    image: *mongo-image
+    entrypoint: ["bash", "/opt/deploy/start-mongo.sh"]
+    command: ["mongod", "--auth"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: whatmeal_root
+    secrets:
+      - mongo_root_password
+    volumes:
+      - mongo-data:/data/db
+      - ./deploy/start-mongo.sh:/opt/deploy/start-mongo.sh:ro
+    networks: [database]
+    healthcheck:
+      # Use the network listener, which is unavailable during local initialization.
+      test: ["CMD", "mongosh", "--host", "mongo", "--quiet", "--eval", "quit(db.adminCommand({ping: 1}).ok ? 0 : 1)"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  mongo-provision:
+    image: *mongo-image
+    entrypoint: ["mongosh", "--nodb", "--quiet"]
+    command: ["--file", "/opt/deploy/provision-mongo.js"]
+    secrets:
+      - mongo_root_password
+      - mongo_app_password
+    volumes:
+      - ./deploy/provision-mongo.js:/opt/deploy/provision-mongo.js:ro
+    networks: [database]
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+secrets:
+  mongo_root_password:
+    file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/mongo-root-password
+  mongo_app_password:
+    file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/mongo-app-password
+
+networks:
+  database:
+    internal: true
+
+volumes:
+  mongo-data:
