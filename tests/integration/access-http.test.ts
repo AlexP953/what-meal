@@ -6,16 +6,19 @@ import { isolatedDatabase } from "../helpers/database";
 import { prepareDatabase } from "@/server/persistence/prepare";
 import { User } from "@/server/persistence/user";
 import { Meal } from "@/server/persistence/meal";
-import { startTestApp, authClient, buildTestApp } from "../helpers/app";
+import { isolatedTestApp, authClient } from "../helpers/app";
+
+const workspace = isolatedTestApp();
+afterAll(() => workspace.cleanup());
 
 describe.each(["dev", "start"] as const)("empty-install access over HTTP (%s)", mode => {
   const database = isolatedDatabase();
-  let app: Awaited<ReturnType<typeof startTestApp>>;
+  let app: Awaited<ReturnType<typeof workspace.start>>;
   beforeAll(async () => {
     database.configure();
     await prepareDatabase();
-    if (mode === "start") await buildTestApp();
-    app = await startTestApp(mode);
+    if (mode === "start") await workspace.build();
+    app = await workspace.start(mode);
   }, 120000);
   afterAll(async () => { await app?.stop(); await database.cleanup(); });
 

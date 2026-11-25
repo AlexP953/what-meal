@@ -97,8 +97,10 @@ eliminada, y 503 genérico si no puede verificar la persistencia.
 comidas ajenas. No utilices identificadores ni roles enviados por el cliente
 como prueba de autorización. `user.id` es una cadena estable y `user.role` refleja
 el rol vigente. Las sesiones públicas no incluyen versiones ni fechas privadas.
-La fecha original del JWT limita el acceso a 24 horas, aunque Auth.js renueve la
-cookie. Los JWT anteriores sin versión y fecha original requieren otro acceso.
+La fecha original del JWT limita el acceso a 24 horas. Solo el inicio y el cierre
+de sesión escriben la cookie de sesión. Las consultas de sesión y las rutas de
+cuentas pueden verificarla. Los JWT anteriores sin versión y fecha original
+requieren otro acceso.
 Si MongoDB impide verificar la cuenta, GET y POST de `/api/auth/session`
 devuelven 503 `PERSISTENCE_UNAVAILABLE` sin datos de sesión y conservan la
 cookie original. Una consulta posterior puede recuperar la sesión si la cookie

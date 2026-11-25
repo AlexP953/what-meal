@@ -30,7 +30,7 @@ export default function LoginForm({ registered = false }: { registered?: boolean
     submitting.current = true;
     setLoading(true);
     try {
-      const res = await signIn("credentials", { redirect: false, email, password });
+      const res = await signIn("credentials", { redirect: false, redirectTo: "/", email, password });
       if (res?.status === 429) setError("Demasiados intentos. Espera antes de volver a iniciar sesión.");
       else if (res?.status === 503) setError("Servicio temporalmente no disponible. Inténtalo más tarde.");
       else if (!res?.ok || res.error) setError("Email o contraseña incorrectos");

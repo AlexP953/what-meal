@@ -1,23 +1,63 @@
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 
-export async function buildTestApp() {
-  await promisify(execFile)(process.execPath, ["node_modules/next/dist/bin/next", "build"], {
-    env: { ...process.env, NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1" },
-    timeout: 120000,
-  });
-}
+const appFiles = [
+  "next.config.ts", "node_modules", "package.json", "package-lock.json",
+  "postcss.config.mjs", "public", "src", "tsconfig.json",
+];
 
-export async function startTestApp(mode: "dev" | "start" = "dev", overrides: Record<string, string> = {}) {
-  const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: mode === "dev" ? "development" : "production", AUTH_SECRET: randomBytes(32).toString("hex"), AUTH_TRUST_HOST: "true", NEXT_PUBLIC_NOTIFICATIONS_ENABLED: "false", NEXT_TELEMETRY_DISABLED: "1" };
+function appEnvironment(nodeEnv: "development" | "production"): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: nodeEnv, NEXT_PUBLIC_NOTIFICATIONS_ENABLED: "false", NEXT_TELEMETRY_DISABLED: "1" };
   delete env.AUTH_URL;
   delete env.NEXTAUTH_URL;
-  Object.assign(env, overrides);
+  return env;
+}
+
+export function isolatedTestApp() {
+  let workspace: Promise<string> | undefined;
+  let directory: string | undefined;
+  let app: Awaited<ReturnType<typeof startTestApp>> | undefined;
+
+  const prepare = () => workspace ??= (async () => {
+    directory = await mkdtemp(join(tmpdir(), "whatmeal-app-"));
+    const cwd = directory;
+    // Next.js loads dotenv files relative to the app root in dev and production.
+    await promisify(execFile)("cp", ["-a", ...appFiles, cwd], { timeout: 60000 });
+    return cwd;
+  })();
+
+  return {
+    async build() {
+      await promisify(execFile)(process.execPath, ["node_modules/next/dist/bin/next", "build"], {
+        cwd: await prepare(), env: appEnvironment("production"), timeout: 120000,
+      });
+    },
+    async start(mode: "dev" | "start" = "dev", overrides: Record<string, string> = {}) {
+      app = await startTestApp(await prepare(), mode, overrides);
+      return app;
+    },
+    async cleanup() {
+      try { await app?.stop(); }
+      finally { if (directory) await rm(directory, { recursive: true, force: true }); }
+    },
+  };
+}
+
+async function startTestApp(cwd: string, mode: "dev" | "start", overrides: Record<string, string>) {
+  const env = {
+    ...appEnvironment(mode === "dev" ? "development" : "production"),
+    AUTH_SECRET: randomBytes(32).toString("hex"),
+    AUTH_TRUST_HOST: "true",
+    ...overrides,
+  };
   const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", mode, "--hostname", "127.0.0.1", "--port", "0"], {
     detached: true, stdio: ["ignore", "pipe", "pipe"],
-    env,
+    cwd, env,
   });
   let output = "";
   let baseUrl = "";
@@ -27,12 +67,14 @@ export async function startTestApp(mode: "dev" | "start" = "dev", overrides: Rec
   child.stderr.on("data", chunk => {
     for (const match of String(chunk).matchAll(/Authentication failed ([A-Za-z]+)/g)) errorTypes.push(match[1]);
   });
-  async function stop() {
+  async function stopProcess() {
     if (!child.pid) return;
     try { process.kill(-child.pid, "SIGTERM"); } catch { return; }
     for (let attempt = 0; attempt < 50 && child.exitCode === null && child.signalCode === null; attempt++) await delay(100);
     try { process.kill(-child.pid, "SIGKILL"); } catch { /* Already stopped. */ }
   }
+  let stopping: Promise<void> | undefined;
+  const stop = () => stopping ??= stopProcess();
   try {
     for (let attempt = 0; attempt < 150; attempt++) {
       if (child.exitCode !== null || child.signalCode !== null) throw new Error("Test app terminated before readiness");

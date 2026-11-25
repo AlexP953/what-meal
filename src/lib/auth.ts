@@ -7,6 +7,7 @@ import { limitedCredentials, LoginLimitError } from "@/server/login-access";
 import { verifySessionAccount } from "@/server/session-account";
 import { applicationOrigin } from "@/server/request-origin";
 import { apiError } from "@/server/http-errors";
+import { adaptAuthResponse, withoutSessionCookie, type LoginFailure } from "@/server/auth-response";
 
 class AccessUnavailable extends CredentialsSignin { code = "persistence_unavailable"; }
 class AccessLimited extends CredentialsSignin {
@@ -15,7 +16,12 @@ class AccessLimited extends CredentialsSignin {
 
 async function handleAuth(request: NextRequest) {
   const origin = applicationOrigin(request);
+  let loginFailure: LoginFailure | undefined;
   let sessionUnavailable = false;
+  function failUnavailable(): never {
+    loginFailure = { status: 503 };
+    throw new AccessUnavailable();
+  }
   const { handlers } = NextAuth({
     secret: getAuthConfig().secret,
     ...authConfig,
@@ -30,12 +36,14 @@ async function handleAuth(request: NextRequest) {
         const token = await authConfig.callbacks.jwt(args);
         if (!token) return null;
         const account = await verifySessionAccount(token.uid, token.authVersion);
-        if (account.status === "unavailable") {
-          if (args.trigger === "signIn") throw new AccessUnavailable();
-          sessionUnavailable = true;
+        if (account.status !== "valid") {
+          if (args.trigger === "signIn") {
+            if (account.status === "unavailable") failUnavailable();
+            throw new CredentialsSignin();
+          }
+          sessionUnavailable = account.status === "unavailable";
           return null;
         }
-        if (account.status === "invalid") return null;
         token.role = account.user.role;
         token.email = account.user.email;
         token.name = account.user.name;
@@ -48,22 +56,28 @@ async function handleAuth(request: NextRequest) {
         async authorize(creds) {
           try { return await limitedCredentials(creds); }
           catch (error) {
-            if (error instanceof LoginLimitError) throw new AccessLimited(error.retryAfter);
-            throw new AccessUnavailable();
+            if (error instanceof LoginLimitError) {
+              loginFailure = { status: 429, retryAfter: error.retryAfter };
+              throw new AccessLimited(error.retryAfter);
+            }
+            failUnavailable();
           }
         },
       }),
     ],
   });
   const response = await handlers[request.method === "POST" ? "POST" : "GET"](request);
-  // Auth.js clears the cookie when the JWT callback returns null. Discard
-  // that response during an outage so the original cookie can be retried.
   if (sessionUnavailable) {
     return apiError(503, "PERSISTENCE_UNAVAILABLE", "Servicio temporalmente no disponible", {
       "Cache-Control": "private, no-store",
     });
   }
-  return response;
+  const { pathname } = request.nextUrl;
+  if (request.method === "POST" && (pathname === "/api/auth/callback/credentials" || pathname === "/api/auth/signout")) {
+    return adaptAuthResponse(response, loginFailure);
+  }
+  // A session check can finish after sign-out. Only explicit auth actions write its cookie.
+  return withoutSessionCookie(response);
 }
 
 export { handleAuth as GET, handleAuth as POST };

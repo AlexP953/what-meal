@@ -50,6 +50,8 @@ Las pruebas verifican CRUD, índices, serialización y recuperación de conexió
 Las pruebas de integración utilizan bases generadas `whatmeal_test_*` y solo
 eliminan las bases que crean. `TEST_MONGODB_URI` permite usar otro servidor local.
 No configures esa variable con servicios anteriores o bases de producción.
+Las pruebas HTTP ejecutan Next.js en carpetas temporales sin archivos `.env`
+del checkout y con las notificaciones desactivadas al compilar y arrancar.
 
 ## Entorno
 
@@ -163,7 +165,7 @@ No conectan MongoDB ni inicializan Firebase Admin en ese estado.
 Next.js 16.4.6 utiliza React 19.3.1. Se conserva Auth.js 5.0.0-beta.32
 con Credentials y sesiones JWT para evitar sustituir la autenticación.
 Mongoose 9.13.0 conserva MongoDB como motor de persistencia.
-El archivo `src/proxy.ts` conserva el matcher del middleware anterior.
+Las rutas de cuentas verifican la sesión en el servidor mediante `requireSession`.
 
 - [Migración Next.js 16](https://nextjs.org/docs/app/guides/upgrading/version-16).
 - [Compatibilidad Mongoose y MongoDB](https://mongoosejs.com/docs/compatibility.html).

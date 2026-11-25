@@ -1,11 +1,12 @@
 import { beforeAll, afterAll, expect, it } from "vitest";
 import { isolatedDatabase } from "../helpers/database";
 import { prepareDatabase } from "@/server/persistence/prepare";
-import { startTestApp, authClient } from "../helpers/app";
+import { isolatedTestApp, authClient } from "../helpers/app";
 const database = isolatedDatabase();
-let app: Awaited<ReturnType<typeof startTestApp>>;
-beforeAll(async () => { database.configure(); await prepareDatabase(); app = await startTestApp(); }, 60000);
-afterAll(async () => { await app?.stop(); await database.cleanup(); });
+const workspace = isolatedTestApp();
+let app: Awaited<ReturnType<typeof workspace.start>>;
+beforeAll(async () => { database.configure(); await prepareDatabase(); app = await workspace.start(); }, 60000);
+afterAll(async () => { try { await workspace.cleanup(); } finally { await database.cleanup(); } });
 it("limits nonexistent accounts after ten failures through the real Auth.js CSRF transport", async () => {
   const client = authClient(app.baseUrl);
   for (let attempt = 0; attempt < 10; attempt++) {
@@ -26,7 +27,7 @@ it("limits nonexistent accounts after ten failures through the real Auth.js CSRF
 
 it("returns safe 503 responses when login persistence is unavailable", async () => {
   await app.stop();
-  app = await startTestApp("dev", { MONGODB_URI: "mongodb://127.0.0.1:1" });
+  app = await workspace.start("dev", { MONGODB_URI: "mongodb://127.0.0.1:1" });
   const response = await authClient(app.baseUrl).signIn("any@example.com", "incorrect");
   expect(response.status).toBe(503);
   const body = await response.text();

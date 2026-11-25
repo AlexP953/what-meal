@@ -19,11 +19,16 @@ const typeLabels: Record<MealLean["type"], string> = {
 };
 
 export default function MealsPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   if (status === "loading") return <p className="p-6" role="status">Cargando...</p>;
   const userId = session?.user?.id;
   if (status !== "authenticated" || !userId) {
-    return <p className="p-6"><Link href="/login" className="underline">Iniciar sesión</Link></p>;
+    return (
+      <div className="flex gap-4 p-6">
+        <button type="button" className="underline" onClick={() => void update()}>Volver a comprobar la sesión</button>
+        <Link href="/login" className="underline">Iniciar sesión</Link>
+      </div>
+    );
   }
   return <AccountMeals key={userId} userId={userId} />;
 }
