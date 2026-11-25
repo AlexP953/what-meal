@@ -30,3 +30,12 @@ it("associates passwords over the byte limit with their field before sending", a
   expect(await submitRegistration(data)).toMatchObject({ ok: false, field: "password" });
   expect(fetcher).not.toHaveBeenCalled();
 });
+
+it("counts astral characters the same way as the account contract", async () => {
+  const fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+  const data = form();
+  data.set("password", "🌱".repeat(11));
+  expect(await submitRegistration(data)).toMatchObject({ ok: false, field: "password" });
+  expect(fetcher).not.toHaveBeenCalled();
+});

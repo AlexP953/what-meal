@@ -171,7 +171,6 @@ body {
 }
 
 .diary-intro .app-title { margin-top: 0; }
-.diary-toolbar { margin: 1.25rem 0 0.75rem; }
 
 .diary-list {
   display: grid;
@@ -208,6 +207,7 @@ body {
 
 .diary-toolbar {
   display: flex;
+  margin: 1.25rem 0 0.75rem;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
@@ -239,7 +239,8 @@ body {
   padding: 0;
 }
 
-.app-button[aria-pressed="true"] {
+.app-button[aria-pressed="true"],
+.app-button[aria-pressed="true"]:not(:disabled):hover {
   background: #215337;
   color: white;
 }
@@ -252,3 +253,63 @@ body {
 
 .app-button-danger:not(:disabled):hover { background: #632016; }
 .app-danger-link { color: #852b21; }
+
+.diary-account-actions {
+  position: absolute;
+  z-index: 1;
+  inset-inline-end: 0;
+  margin-top: 0.5rem;
+  min-width: 10rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid #cbd7c7;
+  border-radius: 0.75rem;
+  background: #fffefa;
+  box-shadow: 0 0.5rem 2rem #243b2020;
+}
+
+.diary-dialog {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  background: transparent;
+  color: inherit;
+  overscroll-behavior: contain;
+}
+
+.diary-dialog::backdrop { background: #16251dcc; }
+
+.diary-dialog-frame {
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  min-height: 100%;
+}
+
+.diary-dialog-panel {
+  width: min(100%, 32rem);
+  min-width: 0;
+  padding: clamp(1rem, 5vw, 1.75rem);
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  border-radius: 1.5rem 1.5rem 0 0;
+  background: #fffefa;
+}
+
+@media (min-width: 40rem) {
+  .diary-dialog-frame {
+    align-items: safe center;
+    padding: 1rem;
+  }
+
+  .diary-dialog-panel { border-radius: 1.5rem; }
+}
+
+.app-surface [aria-disabled="true"] {
+  opacity: 0.65;
+  cursor: default;
+}

@@ -49,11 +49,11 @@ export default function LoginForm({ registered = false }: { registered?: boolean
       <form method="post" onSubmit={handleSubmit} className="app-form" aria-busy={loading} aria-describedby={error ? "login-error" : undefined}>
         <label htmlFor="email">
           Correo electrónico
-          <input id="email" name="email" type="email" autoComplete="email" className="app-field" required />
+          <input id="email" name="email" type="email" autoComplete="email" readOnly={loading} className="app-field" required />
         </label>
         <label htmlFor="password">
           Contraseña
-          <input id="password" name="password" type="password" autoComplete="current-password" className="app-field" required />
+          <input id="password" name="password" type="password" autoComplete="current-password" readOnly={loading} className="app-field" required />
         </label>
         <button type="submit" disabled={!hydrated || loading} className="app-button app-button-primary">
           {loading ? "Iniciando sesión…" : "Iniciar sesión"}

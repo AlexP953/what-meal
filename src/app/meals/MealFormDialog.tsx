@@ -35,7 +35,9 @@ export default function MealFormDialog({ meal, onClose, onConfirmed, fallbackFoc
   }, [confirmDelete]);
 
   function close() {
-    if (confirmDelete && !uncertain) {
+    if (uncertain) {
+      onCheckDiary();
+    } else if (confirmDelete) {
       restoreDeleteFocus.current = true;
       setError("");
       setConfirmDelete(false);
@@ -71,7 +73,9 @@ export default function MealFormDialog({ meal, onClose, onConfirmed, fallbackFoc
           }
           void submit(meal ? { method: "PATCH", meal, fields } : { method: "POST", fields });
         }}>
-        <MealFields meal={meal} nameInvalid={error === missingName} />
+        <fieldset disabled={submitting} className="grid min-w-0 gap-4">
+          <MealFields meal={meal} nameInvalid={error === missingName} />
+        </fieldset>
         {!confirmDelete && error && <p id="meal-form-error" role="alert" className="app-feedback app-error">{error}</p>}
         {!confirmDelete && uncertain && <p role="alert" className="app-feedback app-error">{uncertainMessage}</p>}
         <div className="flex flex-wrap justify-between gap-2">

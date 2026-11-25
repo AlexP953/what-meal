@@ -55,7 +55,7 @@ export async function mutateMeal(operation: MealOperation, userId: string, signa
     };
 
     if (operation.method === "DELETE") {
-      if (response.status !== 200 || typeof body?.message !== "string" || !body.message.trim()) {
+      if (response.status !== 200 || body?.message !== "Meal eliminado") {
         return { status: "uncertain" };
       }
       return { status: "confirmed", change: { id: operation.meal.id } };

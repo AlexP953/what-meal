@@ -58,7 +58,7 @@ it("validates edited meal identity and retains its original creation timestamp",
 
 it("confirms deletion only after receiving the expected successful response", async () => {
   const fetcher = vi.fn()
-    .mockResolvedValueOnce(Response.json({}))
+    .mockResolvedValueOnce(Response.json({ message: "Operación no realizada" }))
     .mockResolvedValueOnce(Response.json({ message: "Meal eliminado" }));
   vi.stubGlobal("fetch", fetcher);
   const operation = { method: "DELETE", meal: { ...meal, type: "lunch", reaction: "good" } } as const;

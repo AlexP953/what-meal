@@ -1,6 +1,6 @@
 export async function submitRegistration(form: FormData): Promise<{ ok: true } | { ok: false; error: string; duplicate?: boolean; field?: "password" }> {
   const password = String(form.get("password") ?? "");
-  if (password.length < 12 || new TextEncoder().encode(password).length > 72) {
+  if (Array.from(password).length < 12 || new TextEncoder().encode(password).length > 72) {
     return { ok: false, field: "password", error: "Usa al menos 12 caracteres y un máximo de 72 bytes UTF-8." };
   }
   try {

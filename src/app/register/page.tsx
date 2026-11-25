@@ -35,16 +35,16 @@ export default function RegisterPage() {
       <form method="post" onSubmit={handleSubmit} className="app-form" aria-busy={loading} aria-describedby={failure ? "registration-error" : undefined}>
         <label htmlFor="name">
           Nombre <span className="app-muted font-normal">(opcional)</span>
-          <input id="name" name="name" autoComplete="name" maxLength={100} className="app-field" />
+          <input id="name" name="name" autoComplete="name" maxLength={100} readOnly={loading} className="app-field" />
         </label>
         <label htmlFor="email">
           Correo electrónico
-          <input id="email" name="email" type="email" autoComplete="email" aria-invalid={failure?.duplicate} aria-describedby={failure?.duplicate ? "registration-error" : undefined} className="app-field" required />
+          <input id="email" name="email" type="email" autoComplete="email" aria-invalid={failure?.duplicate} aria-describedby={failure?.duplicate ? "registration-error" : undefined} readOnly={loading} className="app-field" required />
         </label>
         <div>
           <label htmlFor="password">Contraseña</label>
           <input
-            id="password" name="password" type="password" autoComplete="new-password" minLength={12} required className="app-field"
+            id="password" name="password" type="password" autoComplete="new-password" minLength={12} required readOnly={loading} className="app-field"
             aria-invalid={failure?.field === "password"}
             aria-describedby={failure?.field === "password" ? "password-help registration-error" : "password-help"}
           />

@@ -276,6 +276,36 @@ teclado en desarrollo y producción. También comprueba consola, etiquetas, erro
 400/409/429, desconexión y recuperación de los formularios. HTTP no sustituye
 esa comprobación de interacción ni la inspección visual.
 
+## Primer recorrido del diario en móvil
+
+Inicia MongoDB y Next.js con la guía de [instalación desde cero](#instalación-desde-cero).
+Usa una cuenta nueva y datos de prueba.
+
+1. Abre `/login` y selecciona **Crear una cuenta**. Registra un correo nuevo y
+   confirma que el aviso de cuenta creada aparece en la pantalla de acceso.
+2. Inicia sesión. El diario vacío explica cómo empezar. Selecciona **Añadir comida**,
+   introduce un nombre y una fecha, elige el tipo y la reacción, y guarda.
+3. Abre **Filtros**. Combina tipo, reacciones y fechas. Aplica una combinación sin
+   coincidencias y selecciona **Limpiar filtros** para recuperar la lista completa.
+4. Abre la fila de la comida, cambia un campo y vacía un dato opcional. Guarda y
+   comprueba el aviso. Selecciona **Eliminar**, cancela una vez y confirma después.
+5. Abre **Menú de cuenta** y selecciona **Cerrar sesión**. Vuelve a `/meals` y
+   comprueba que el acceso solicita autenticación.
+
+Haz el recorrido a 320 píxeles CSS y en una pantalla ancha. Usa Tab, Mayús+Tab
+y Escape para comprobar el foco de los diálogos. En un dispositivo o emulador
+Android, abre la aplicación en Chrome y repite el recorrido con tacto.
+Con el teclado en pantalla abierto, enfoca Notas y desplaza el formulario hasta
+la acción de guardar. Activa TalkBack para comprobar las etiquetas, los títulos
+de los diálogos y los avisos de carga, error y confirmación.
+
+Para probar la recuperación, bloquea temporalmente la consulta GET a
+`/api/meals` desde las herramientas del navegador. Comprueba que un error de
+la primera consulta ofrece **Reintentar consulta**. Tras guardar una comida,
+verifica que el fallo del GET conserva el cambio confirmado y que el reintento
+solo envía otra consulta. Si pierdes la respuesta de una operación, selecciona
+**Consultar diario** para revisar todas tus comidas antes de repetirla.
+
 ## Integración continua
 
 El flujo `CI / quality` comprueba cada push y pull request con el entorno de

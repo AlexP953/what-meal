@@ -13,6 +13,7 @@ import {
 import { FunnelIcon, Bars3Icon, PlusIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { announceSessionChange, postAuth, watchSessionChange } from "../session-client";
 import AccessScreen from "../components/AccessScreen";
+import { notificationsEnabled } from "@/shared/config";
 import EnableNotifications from "../components/EnableNotifications";
 
 export default function MealsPage() {
@@ -40,6 +41,7 @@ function SessionLost() {
 function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number }) {
   const [diary, setDiary] = useState<DiarySnapshot | null>();
   const [loading, setLoading] = useState(true);
+  const [reviewingMutation, setReviewingMutation] = useState(false);
   const [error, setError] = useState("");
   const [confirmation, setConfirmation] = useState<{ message: string }>();
   const signOutPending = useRef(false);
@@ -48,14 +50,15 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
   const [request, setRequest] = useState({ filters: defaultDiaryFilters });
   const pendingRequest = useRef<AbortController>(null);
   const createButton = useRef<HTMLButtonElement>(null);
+  const filterButton = useRef<HTMLButtonElement>(null);
+  const title = useRef<HTMLHeadingElement>(null);
 
-  const [openCreate, setOpenCreate] = useState(false);
-
-  const [selectedMeal, setSelectedMeal] = useState<DiaryMeal | null>(null);
+  const [mealForm, setMealForm] = useState<DiaryMeal | "create">();
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -64,22 +67,15 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
       }
     }
 
-    if (menuOpen) {
-      document.addEventListener("click", handleClickOutside);
-    } else {
-      document.removeEventListener("click", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("click", handleClickOutside);
-    };
+    if (!menuOpen) return;
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
   }, [menuOpen]);
 
   const expireSession = useCallback(() => {
     pendingRequest.current?.abort();
     setDiary(null);
-    setOpenCreate(false);
-    setSelectedMeal(null);
+    setMealForm(undefined);
     setFiltersOpen(false);
   }, []);
 
@@ -123,6 +119,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
         }
         setDiary(current => current !== null && !signal.aborted ? result : current);
         setError("");
+        setReviewingMutation(false);
       } catch {
         if (signal.aborted) return;
         if (!(expiresAt > Date.now())) {
@@ -146,9 +143,10 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
     setRequest(current => ({ filters: filters ?? current.filters }));
   }
 
-  function closeMealForm() {
-    setOpenCreate(false);
-    setSelectedMeal(null);
+  function checkMutation() {
+    setMealForm(undefined);
+    setReviewingMutation(true);
+    refresh(defaultDiaryFilters);
   }
 
   function confirmChange(change: DiaryChange, message: string) {
@@ -193,34 +191,30 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
       <div className="diary-shell">
         <header className="diary-header">
           <span className="diary-brand">What<span>Meal</span></span>
-          <div className="relative z-30" ref={menuRef}>
+          <div ref={menuRef} className="relative" onKeyDown={event => {
+            if (event.key === "Escape" && menuOpen) {
+              setMenuOpen(false);
+              menuButton.current?.focus();
+            }
+          }}>
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen((v) => !v);
-              }}
-              className="p-2 rounded-lg hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-green-700"
-              aria-label="Menú"
+              ref={menuButton}
+              type="button"
+              onClick={() => setMenuOpen(open => !open)}
+              className="app-button dialog-icon"
+              aria-label="Menú de cuenta"
               aria-expanded={menuOpen}
+              aria-controls={menuOpen ? "diary-account-actions" : undefined}
             >
-              <Bars3Icon className="h-6 w-6 text-gray-700" />
+              <Bars3Icon aria-hidden="true" className="h-5 w-5" />
             </button>
-
             {menuOpen && (
-              <div
-                className="absolute right-0 mt-2 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-2"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="px-4 pb-2 border-b border-gray-100">
-                  <EnableNotifications onDone={() => setMenuOpen(false)} />
-                </div>
-
-                <button
-                  onClick={() => void closeSession()}
-                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  Cerrar sesión
-                </button>
+              <div id="diary-account-actions" className="diary-account-actions">
+                {notificationsEnabled && <EnableNotifications onDone={() => {
+                  setMenuOpen(false);
+                  menuButton.current?.focus();
+                }} />}
+                <button type="button" onClick={() => void closeSession()} className="app-link">Cerrar sesión</button>
               </div>
             )}
           </div>
@@ -228,15 +222,16 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
 
         <section className="diary-intro" aria-labelledby="diary-title">
           <div className="min-w-0">
-            <h1 id="diary-title" className="app-title">Tus comidas</h1>
+            <h1 ref={title} id="diary-title" tabIndex={-1} className="app-title">Tus comidas</h1>
             <p className="app-muted">
               {empty ? "Empieza por añadir tu primera comida y anota cómo te sentó." : "Consulta y registra tus comidas."}
             </p>
           </div>
           {diary && (
-            <button ref={createButton} className="app-button app-button-primary shrink-0" onClick={event => {
+            <button ref={createButton} className="app-button app-button-primary shrink-0" aria-disabled={reviewingMutation} onClick={event => {
+              if (reviewingMutation) return;
               event.currentTarget.focus();
-              setOpenCreate(true);
+              setMealForm("create");
             }}>
               <PlusIcon aria-hidden="true" className="h-5 w-5" />
               Añadir comida
@@ -249,8 +244,13 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
         </p>
         {error && (
           <div className="app-feedback app-error mt-4 flex flex-wrap items-center justify-between gap-x-4">
-            <p role="alert">{error}</p>
-            <button type="button" onClick={() => refresh()} className="app-link">Reintentar consulta</button>
+            <p role="alert">{reviewingMutation
+              ? "No se pudieron consultar las comidas. Reintenta antes de hacer cambios."
+              : error}</p>
+            <button type="button" onClick={() => {
+              title.current?.focus();
+              refresh();
+            }} className="app-link">Reintentar consulta</button>
           </div>
         )}
 
@@ -261,8 +261,11 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
         {diary && (
           <div className="diary-toolbar">
             <button
+              ref={filterButton}
               type="button"
+              aria-disabled={reviewingMutation}
               onClick={event => {
+                if (reviewingMutation) return;
                 event.currentTarget.focus();
                 setFiltersOpen(true);
               }}
@@ -285,19 +288,21 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
                 <button
                   type="button"
                   className="diary-row"
+                  aria-disabled={reviewingMutation}
                   onClick={event => {
+                    if (reviewingMutation) return;
                     event.currentTarget.focus();
-                    setSelectedMeal(meal);
+                    setMealForm(meal);
                   }}
                 >
-                  <div className="min-w-0">
-                    <p className="font-semibold">{meal.name}</p>
-                    <p className="app-muted text-sm">
+                  <span className="min-w-0">
+                    <span className="block font-semibold">{meal.name}</span>
+                    <span className="app-muted block text-sm">
                       {typeLabels[meal.type]} · <time dateTime={meal.date}>{formatMealDate(meal.date)}</time>
-                    </p>
-                    {meal.place && <p className="app-muted mt-1 text-sm">{meal.place}</p>}
-                    {meal.notes && <p className="app-muted mt-1 text-sm italic">{meal.notes}</p>}
-                  </div>
+                    </span>
+                    {meal.place && <span className="app-muted mt-1 block text-sm">{meal.place}</span>}
+                    {meal.notes && <span className="app-muted mt-1 block text-sm italic">{meal.notes}</span>}
+                  </span>
                   <span className="diary-reaction" data-reaction={meal.reaction}>
                     {reactionLabels[meal.reaction]}
                   </span>
@@ -309,27 +314,27 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
         ) : filtered && !loading && !error && (
           <div className="diary-no-matches">
             <p>No hay comidas que coincidan con estos filtros.</p>
-            <button type="button" className="app-link" onClick={() => refresh(defaultDiaryFilters)}>Limpiar filtros</button>
+            <button type="button" className="app-link" onClick={() => {
+              filterButton.current?.focus();
+              refresh(defaultDiaryFilters);
+            }}>Limpiar filtros</button>
           </div>
         )}
       </div>
 
-      {(openCreate || selectedMeal) && (
+      {mealForm && (
         <MealFormDialog
-          meal={selectedMeal ?? undefined}
-          onClose={closeMealForm}
+          meal={mealForm === "create" ? undefined : mealForm}
+          onClose={() => setMealForm(undefined)}
           fallbackFocus={createButton}
           userId={userId}
           onConfirmed={confirmChange}
-          onCheckDiary={() => {
-            closeMealForm();
-            refresh(defaultDiaryFilters);
-          }}
+          onCheckDiary={checkMutation}
           onSessionLost={expireSession}
         />
       )}
       {filtersOpen && (
-        <DiaryFiltersDialog filters={filters} onClose={() => setFiltersOpen(false)} onApply={next => {
+        <DiaryFiltersDialog filters={request.filters} onClose={() => setFiltersOpen(false)} onApply={next => {
           refresh(next);
           setFiltersOpen(false);
         }} />

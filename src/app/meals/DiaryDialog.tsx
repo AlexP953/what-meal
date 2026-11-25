@@ -32,19 +32,24 @@ export default function DiaryDialog({ titleId, onClose, submitting, fallbackFocu
     <dialog
       ref={dialogRef}
       aria-labelledby={titleId}
+      onKeyDown={event => {
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        event.preventDefault();
+        if (!submitting) onClose();
+      }}
       onCancel={event => {
         event.preventDefault();
         if (!submitting) onClose();
       }}
-      className="fixed inset-0 m-0 h-full max-h-none w-full max-w-none border-0 bg-transparent p-0 backdrop:bg-black/40"
+      className="diary-dialog"
     >
       <div
-        className="flex min-h-full items-end justify-center sm:items-center"
+        className="diary-dialog-frame"
         onClick={event => {
           if (event.target === event.currentTarget && !submitting) onClose();
         }}
       >
-        <div className="relative w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 shadow-xl mx-0 sm:mx-4">
+        <div className="diary-dialog-panel">
           {children}
         </div>
       </div>

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AuthProvider from "./SessionProvider"; 
@@ -16,6 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "WhatMeal",
   description: "App para registrar comidas y síntomas",
+};
+
+export const viewport: Viewport = {
+  interactiveWidget: "resizes-content",
+  themeColor: "#f4f5ed",
 };
 
 export default function RootLayout({
