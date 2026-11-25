@@ -193,6 +193,79 @@ incluyen. La revisión de accesibilidad continúa siendo una comprobación de in
 Solo se excluyen archivos generados. No se admiten advertencias de lint.
 [Configuración oficial](https://nextjs.org/docs/app/api-reference/config/eslint#using-the-plugin-directly).
 
+## Despliegue HTTPS
+
+En un servidor Linux con Docker Engine y Compose 2.24 o posterior, usa un
+almacenamiento persistente para los volúmenes de Docker. La referencia fija
+Node.js 24.22.3, MongoDB 8.0.38 y Caddy 2.11.4 por digest. Usa una máquina
+compatible con MongoDB 8.0 y con espacio para compilar la aplicación y conservar
+los datos y certificados. Comprueba `docker info` y `docker compose version`.
+
+Clona el repositorio y selecciona la revisión que vas a desplegar con
+`git switch --detach <commit>`. Registra el resultado de `git rev-parse HEAD`.
+Usa un nombre de proyecto estable, por ejemplo `whatmeal-deploy`, en cada
+operación de esta instalación. Un nombre distinto usa otros volúmenes.
+
+Crea un registro DNS A para el servidor. Añade AAAA solo si el servidor acepta
+conexiones IPv6. Permite TCP 80 y 443 en el cortafuegos y en el proveedor.
+Deja libres esos puertos para Caddy. Caddy necesita salida a Internet para
+obtener y renovar el certificado. MongoDB y Next.js se comunican por redes
+privadas de Compose.
+
+Define `AUTH_URL` con el origen público, por ejemplo `https://comidas.tudominio.es`,
+sin barra final ni puerto explícito. Define `WHATMEAL_SECRETS_DIR` con la ruta
+absoluta a un directorio privado fuera del checkout. Los comandos siguientes
+suponen Docker Engine en modo rootful, sin reasignación de UID. El contenedor
+Next.js y la tarea de preparación leen archivos con UID 1000.
+
+```bash
+export AUTH_URL=https://comidas.tudominio.es
+export WHATMEAL_SECRETS_DIR=/etc/whatmeal/secrets
+sudo install -d -m 0700 "$WHATMEAL_SECRETS_DIR"
+sudo bash -eu -o noclobber -c '
+  umask 077
+  for name in auth-secret mongo-app-password mongo-root-password; do
+    openssl rand -hex 32 > "$1/$name"
+  done
+  chown 1000 "$1/auth-secret" "$1/mongo-app-password"
+' _ "$WHATMEAL_SECRETS_DIR"
+
+docker compose -p whatmeal-deploy -f compose.deploy.yml config --quiet
+docker compose -p whatmeal-deploy -f compose.deploy.yml build
+docker compose -p whatmeal-deploy -f compose.deploy.yml up -d --wait
+```
+
+Crea estos archivos una sola vez antes del primer arranque. Guarda los tres
+valores por separado en tu gestor de secretos. Conserva los archivos al
+reiniciar y actualizar. Cambiar el archivo de una contraseña de MongoDB
+requiere cambiar también la cuenta correspondiente en la base. La compilación
+y la ejecución mantienen desactivadas las notificaciones y prescinden de
+Firebase. Compose verifica la cuenta de aplicación y prepara la base antes de
+iniciar Next.js y Caddy.
+
+En el primer arranque, sigue los registros de Caddy hasta que obtenga el
+certificado. Verifica HTTP, la cadena de confianza, el nombre y la caducidad
+del certificado desde otra red. Estos comandos usan el almacén de confianza del cliente.
+
+```bash
+curl -sSI "http://${AUTH_URL#https://}/login"
+curl -fsS -o /dev/null -w '%{http_code}\n' "$AUTH_URL/login"
+host=${AUTH_URL#https://}
+openssl s_client -connect "$host:443" -servername "$host" \
+  -verify_hostname "$host" -verify_return_error </dev/null |
+  openssl x509 -noout -subject -issuer -dates
+```
+
+Espera el estado 308, una cabecera `Location` con el origen HTTPS y ninguna
+cabecera `Set-Cookie` en HTTP. Espera 200 en HTTPS. Conserva el volumen `caddy-data` y mantén DNS
+y puertos web disponibles para que Caddy renueve el certificado. Consulta
+`docker compose -p whatmeal-deploy -f compose.deploy.yml logs --tail 50 caddy`
+para ver la emisión y los errores de renovación. Programa una comprobación
+periódica de la fecha de caducidad con el mismo cliente externo.
+
+[HTTPS automático de Caddy](https://caddyserver.com/docs/automatic-https).
+[Secretos en Docker Compose](https://docs.docker.com/compose/how-tos/use-secrets/).
+
 ## MongoDB local
 
 Instala Docker Engine o Docker Desktop con Compose 2.24 o posterior.

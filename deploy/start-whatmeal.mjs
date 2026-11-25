@@ -12,7 +12,7 @@ function readSecret(name) {
 
 function httpsOrigin(value) {
   const url = URL.parse(value ?? "");
-  if (url?.protocol !== "https:" || (value !== url.origin && value !== `${url.origin}/`)) {
+  if (url?.protocol !== "https:" || url.port || value !== url.origin) {
     throw new Error("AUTH_URL must be a canonical HTTPS origin");
   }
   return url.origin;

@@ -58,6 +58,7 @@ services:
 
   whatmeal:
     <<: *whatmeal-runtime
+    networks: [backend, database]
     build:
       context: .
       target: runner
@@ -72,6 +73,23 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  caddy:
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    environment:
+      AUTH_URL: ${AUTH_URL:?Set AUTH_URL to your HTTPS origin}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [edge, backend]
+    depends_on:
+      whatmeal:
+        condition: service_healthy
+    restart: unless-stopped
+
 secrets:
   auth_secret:
     file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/auth-secret
@@ -81,8 +99,13 @@ secrets:
     file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/mongo-app-password
 
 networks:
+  edge:
+  backend:
+    internal: true
   database:
     internal: true
 
 volumes:
   mongo-data:
+  caddy-data:
+  caddy-config:
