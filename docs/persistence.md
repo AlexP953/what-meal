@@ -207,18 +207,67 @@ La fecha civil nunca se convierte a Date ni depende de una zona horaria.
 El serializador representa identificadores como cadenas y marcas temporales ISO 8601.
 Al actualizar mediante consultas, utiliza `{runValidators: true}`.
 
-MongoDB no comprueba que exista el User referenciado. El consumidor comprueba
-existencia y permisos antes de escribir. La quest 150 define operaciones, filtros
-y autorización del diario. Los modelos no incorporan reglas de sesiones ni permisos.
+MongoDB no comprueba que exista el User referenciado. Las rutas verifican la
+cuenta y sus permisos antes de escribir. Las comidas pobladas de cuentas también
+se serializan explícitamente. `src/app/types/index.ts` conserva los nombres
+de tipos existentes mediante contratos públicos.
 
-Las rutas del diario conservan sus envoltorios y alias HTTP existentes:
-la lista y la creación devuelven `id` y `user`, mientras el detalle utiliza `meal`.
-La actualización conserva `meal.id`. Los adaptadores emplean el serializador
-común antes de construir cada respuesta. Las comidas pobladas de cuentas también
-se serializan explícitamente. Las quests consumidoras pueden unificar esos alias
-al especificar sus propios contratos HTTP.
-`src/app/types/index.ts` conserva nombres de tipos existentes mediante contratos
-públicos, sin importar Mongoose ni configuración privada.
+## API del diario
+
+Las cinco operaciones requieren una sesión vigente. La lista utiliza la cuenta
+autenticada, incluso si una cuenta normal envía `userId`. Un administrador
+puede indicar otro propietario con un `userId` válido. Únicamente el propietario
+o un administrador vigente puede consultar, editar o eliminar una comida por
+identificador. Un identificador ajeno existente devuelve 403 a una cuenta normal.
+POST, PATCH y DELETE aplican la comprobación de origen de cuentas y aceptan una
+sesión válida sin cabeceras de origen ni Fetch Metadata.
+
+| Operación | Entrada | Resultado |
+| --- | --- | --- |
+| POST `/api/meals` | Objeto JSON con `name`, `date`, `type` y `reaction` obligatorios, y `place` y `notes` opcionales | 201 con la comida directamente y los alias `id` y `user` |
+| GET `/api/meals` | Filtros opcionales en la URL | 200 con un array de comidas con `id` y `user`, o `[]` |
+| GET `/api/meals/[id]` | Identificador de comida de 24 dígitos hexadecimales | 200 con `{meal}`, incluidos `meal._id`, `meal.id` y `meal.userId` |
+| PATCH `/api/meals/[id]` | Objeto JSON con al menos uno de los seis campos editables | 200 con `{meal}`, incluidos `meal.id` y `meal.userId` |
+| DELETE `/api/meals/[id]` | Identificador de comida de 24 dígitos hexadecimales | 200 con `{message}` tras confirmar la eliminación |
+
+El alta asigna la comida a la cuenta autenticada. La edición conserva el
+propietario y los campos omitidos. Ambas operaciones ignoran `userId` y los
+demás campos ajenos al contrato. Envía `""` para vaciar `place` o `notes` al
+editar. La lista, el alta y la edición vuelven con `null` para valores opcionales
+ausentes. El detalle omite dichos campos cuando faltan. La lista, el alta y el
+detalle incluyen `createdAt` y `updatedAt` como marcas ISO 8601. La edición
+permite obtenerlas mediante una consulta posterior. Cada respuesta conserva
+`date` como el día civil indicado, también en fechas bisiestas.
+
+`type` acepta un tipo de comida. Repite `reaction` para seleccionar cualquiera
+de las reacciones indicadas. Los filtros por tipo, reacción y fecha se combinan
+dentro de la cuenta autorizada. `dateFrom` y `dateTo` aceptan días civiles
+inclusivos y funcionan por separado. `sortDir` acepta `asc` y `desc` y solo
+cambia el orden de `date`. Por defecto, se muestran las fechas más recientes.
+Los empates se ordenan por `createdAt` y luego por identificador, ambos
+descendentes. La misma consulta determina los resultados de la pantalla después
+de cada mutación confirmada.
+
+| Estado | code | Significado |
+| --- | --- | --- |
+| 400 | `INVALID_INPUT` | JSON, campos, identificadores o filtros inválidos, incluido un rango invertido |
+| 401 | `UNAUTHORIZED` | Sesión ausente, caducada, revocada o cuenta eliminada |
+| 403 | `FORBIDDEN` | Comida ajena para la cuenta normal |
+| 403 | `FORBIDDEN_ORIGIN` | Origen rechazado para la mutación |
+| 404 | `MEAL_NOT_FOUND` | Comida inexistente |
+| 503 | `PERSISTENCE_UNAVAILABLE` | Persistencia temporalmente indisponible |
+| 500 | `INTERNAL_ERROR` | Fallo inesperado |
+
+Los errores contienen `{error,code}` con un mensaje público. Si se pierde la
+respuesta de una mutación, consulta el diario para confirmar el estado antes de
+reintentar. Repetir POST puede crear un duplicado. Tras un PATCH incierto, consulta
+los campos actuales y vuelve a enviar los cambios que falten. Repetir DELETE
+sobre una comida ausente devuelve 404 `MEAL_NOT_FOUND`.
+
+`npm run verify:local` compara las respuestas autenticadas antes y después
+de reiniciar Next.js y MongoDB en el mismo volumen aislado. Comprueba la
+edición, la eliminación, una comida civil existente y la representación de
+los días desde `Pacific/Kiritimati` y `Pacific/Honolulu`.
 
 ## Preparación y ejemplo
 

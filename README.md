@@ -96,7 +96,9 @@ Genera su propio secreto temporal de autenticación.
 El comando ejecuta `npm ci`, compara el lockfile, prepara MongoDB dos veces y
 comprueba que no existen cuentas ni comidas. Comprueba `/login` por HTTP en
 desarrollo y producción. Un documento de prueba demuestra persistencia después
-de reiniciar la aplicación y MongoDB. La compilación sucede con MongoDB detenido
+de reiniciar la aplicación y MongoDB. Una prueba autenticada compara comidas,
+filtros y fechas civiles en dos zonas horarias después de otro reinicio.
+La compilación sucede con MongoDB detenido
 y sin las variables de persistencia ni autenticación.
 
 Cada ejecución genera un proyecto Compose con volumen propio y puertos locales

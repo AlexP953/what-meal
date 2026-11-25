@@ -81,7 +81,8 @@ start_app() {
   local mode=$1
   local log="$scratch/$mode.log"
   : > "$log"
-  setsid node node_modules/next/dist/bin/next "$mode" --hostname 127.0.0.1 --port 0 >"$log" 2>&1 &
+  # Auth.js requires a trusted host in production. The probe binds a loopback port.
+  AUTH_TRUST_HOST=true setsid node node_modules/next/dist/bin/next "$mode" --hostname 127.0.0.1 --port 0 >"$log" 2>&1 &
   app_pid=$!
   # With job control disabled, the child is not a group leader before setsid.
   # Confirm session ownership before any group signal, including failure cleanup.
@@ -135,5 +136,16 @@ stop_app
 database_address
 start_app start
 probe read
+diary_probe() {
+  TZ="$1" timeout --kill-after=10 45 node --conditions=react-server --import tsx scripts/diary-persistence-probe.ts "$2" "$app_url" "$scratch/diary.json"
+}
+diary_probe Pacific/Kiritimati seed
+stop_app
+compose restart mongo
+compose up -d --wait --wait-timeout 90 mongo
+database_address
+start_app start
+diary_probe Pacific/Kiritimati read
+diary_probe Pacific/Honolulu read
 cmp package-lock.json "$scratch/lockfile.snapshot"
 echo "Clean installation, development, production and persistence restarts passed."
