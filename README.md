@@ -266,6 +266,30 @@ periódica de la fecha de caducidad con el mismo cliente externo.
 [HTTPS automático de Caddy](https://caddyserver.com/docs/automatic-https).
 [Secretos en Docker Compose](https://docs.docker.com/compose/how-tos/use-secrets/).
 
+### Prueba desde Android
+
+Usa un despliegue temporal con datos ficticios y un certificado de confianza
+pública. En Android, desactiva el wifi y abre `$AUTH_URL/login` desde otra red.
+Crea una cuenta de prueba, inicia sesión y guarda una comida. Vuelve a abrir el
+diario y confirma que aparece. Comprueba en el inspector del navegador que la
+cookie `__Secure-authjs.session-token` tiene el atributo `Secure` y que las
+redirecciones de autenticación conservan el origen HTTPS.
+
+Desde otro cliente con Node.js y las dependencias del repositorio instaladas,
+ejecuta esta prueba complementaria. Comprueba la cookie y las redirecciones
+y verifica las respuestas 401 sin sesión y 403 desde un origen ajeno.
+
+```bash
+scratch=$(mktemp -d)
+node --import tsx scripts/deployment-diary-probe.ts --disposable seed "$AUTH_URL" "$scratch/diary.json"
+node --import tsx scripts/deployment-diary-probe.ts --disposable read "$AUTH_URL" "$scratch/diary.json"
+```
+
+La prueba crea una cuenta y una comida ficticias. Conserva el archivo privado
+si vas a comparar el diario tras una actualización o restauración. El archivo
+contiene las credenciales de la cuenta ficticia y los datos esperados. Elimínalo
+cuando termines y registra solo el resultado de las comprobaciones.
+
 ## MongoDB local
 
 Instala Docker Engine o Docker Desktop con Compose 2.24 o posterior.
