@@ -123,6 +123,8 @@ módulos exclusivos del servidor. Las pruebas de integración se ejecutan en ser
 Las rutas dinámicas resuelven `params` como promesa, conforme a
 [Next.js](https://nextjs.org/docs/app/api-reference/file-conventions/route#context-optional).
 Los tipos de Auth.js amplían los campos `id` y `role` del contrato JWT existente.
+El JWT incorpora una versión privada y una fecha original para revocar sesiones
+y limitar su duración. Esos campos no pertenecen a la sesión pública.
 
 ## Configuración
 
@@ -136,6 +138,10 @@ Admite servidores múltiples, credenciales codificadas y direcciones SRV.
 Los errores de sintaxis identifican `MONGODB_URI` sin mostrar su contenido.
 El nombre admite letras ASCII, cifras, guiones y guiones bajos, hasta 63 caracteres.
 La autenticación exige un secreto de al menos 32 caracteres.
+Configura `AUTH_URL` con el origen real de la aplicación, especialmente con HTTPS
+o un proxy. Los destinos de redirección permanecen en ese origen. Las funciones
+Auth.js de servidor sin una solicitud exigen esta variable. Sin ella, las rutas
+HTTP usan el `Host` directo y nunca confían en cabeceras reenviadas.
 Cada componente valida sus variables al consumirlas. La compilación no exige
 MongoDB ni credenciales Firebase. Los errores identifican la variable sin su valor.
 Las variables `NEXT_PUBLIC_*` son públicas y nunca contienen secretos.
@@ -222,7 +228,48 @@ Después de configurar `.env.local` y arrancar MongoDB, ejecuta `npm run db:prep
 El comando carga `.env.local`, crea las colecciones e índices ausentes y termina
 con `Database prepared.`. Repetirlo conserva documentos e índices adicionales.
 No genera usuarios ni comidas. Una base recién preparada permanece vacía.
-Para acceder con una cuenta nueva debes completar la quest de cuentas 149.
+Abre `/register` para crear la primera cuenta normal y después `/login` para
+acceder. El menú ofrece **Cerrar sesión** y vuelve a `/login`. La sesión permite
+recargar y dura como máximo 24 horas desde el acceso original. Cambiar la
+contraseña invalida todas las sesiones anteriores, incluida la sesión actual.
+Eliminar una cuenta invalida su sesión y conserva sus comidas, sin asignarlas
+a otra cuenta. Consulta la matriz y los errores en [persistencia](docs/persistence.md).
+
+El registro rechaza campos desconocidos y cualquier `role` recibido, incluso
+para la primera cuenta. Las cuentas administrativas se habilitan mediante el
+comando local anterior. El correo se normaliza antes de validar y almacenar.
+Los accesos aceptan contraseñas existentes, aunque sean anteriores al mínimo nuevo.
+
+La instalación comparte veinte intentos de registro por hora cuando no existe
+una dirección de origen verificable. Una persona puede agotar esa cuota para
+toda la instalación. Cada correo dispone de diez fallos de acceso por quince
+minutos. MongoDB comparte los límites entre procesos. Las respuestas limitadas
+incluyen 429 y `Retry-After`, sin distinguir cuentas existentes.
+
+## Verificación del acceso
+
+```bash
+npm test
+npm run test:integration
+npm run typecheck
+npm run lint
+npm run build
+npm audit --audit-level=high
+npm run verify:local
+```
+
+`tests/integration/access-http.test.ts` inicia la aplicación en desarrollo y
+producción sobre bases generadas, con sesiones emitidas y CSRF reales. Compila
+antes de comprobar producción. Comprueba registro sin sesión automática,
+permisos de tres cuentas, cambios de rol, revocación, eliminación y cierre.
+Los procesos de prueba usan puertos locales asignados por el sistema y se detienen
+al terminar. Las demás pruebas cubren concurrencia, caducidad, fallos de conexión,
+orígenes, cookies y el comando de promoción.
+
+La comprobación de navegador completa registro, acceso, recarga y cierre mediante
+teclado en desarrollo y producción. También comprueba consola, etiquetas, errores
+400/409/429, desconexión y recuperación de los formularios. HTTP no sustituye
+esa comprobación de interacción ni la inspección visual.
 
 ## Integración continua
 

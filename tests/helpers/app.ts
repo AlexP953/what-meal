@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
 export async function startTestApp(mode: "dev" | "start" = "dev", overrides: Record<string, string> = {}) {
-  const env: NodeJS.ProcessEnv = { ...process.env, AUTH_SECRET: randomBytes(32).toString("hex"), AUTH_TRUST_HOST: "true", NEXT_PUBLIC_NOTIFICATIONS_ENABLED: "false", NEXT_TELEMETRY_DISABLED: "1" };
+  const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: mode === "dev" ? "development" : "production", AUTH_SECRET: randomBytes(32).toString("hex"), AUTH_TRUST_HOST: "true", NEXT_PUBLIC_NOTIFICATIONS_ENABLED: "false", NEXT_TELEMETRY_DISABLED: "1" };
   delete env.AUTH_URL;
   delete env.NEXTAUTH_URL;
   Object.assign(env, overrides);
@@ -59,5 +59,8 @@ export function authClient(baseUrl: string) {
   async function signOut() {
     return request("/api/auth/signout", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "X-Auth-Return-Redirect": "1" }, body: new URLSearchParams({ csrfToken: await csrf(), callbackUrl: `${baseUrl}/login` }) });
   }
-  return { request, signIn, signOut };
+  async function updateSession(data: unknown) {
+    return request("/api/auth/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ csrfToken: await csrf(), data }) });
+  }
+  return { request, signIn, signOut, updateSession };
 }

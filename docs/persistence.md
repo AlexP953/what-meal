@@ -78,7 +78,7 @@ Los consumidores de notificaciones deben solicitar `+fcmToken`.
 
 ## Identidad y autorización
 
-Las mutaciones autenticadas de cuentas y tokens rechazan un `Origin` ajeno o
+El registro y las mutaciones autenticadas de cuentas y tokens rechazan un `Origin` ajeno o
 `null` con 403 `FORBIDDEN_ORIGIN`. Comparan con `AUTH_URL` o con el origen servido,
 sin utilizar cabeceras reenviadas. Configura `AUTH_URL` para HTTPS y proxies.
 Sin esa variable, el origen usa HTTP y el `Host` directo, porque Next.js deriva
@@ -103,6 +103,7 @@ La fecha original del JWT limita el acceso a 24 horas, aunque Auth.js renueve la
 cookie. Los JWT anteriores sin versión y fecha original requieren otro acceso.
 
 ## Validación del modelo User
+
 El rol no admite null ni eliminación mediante `$unset`.
 Las actualizaciones mediante consultas requieren `{runValidators: true}` para
 aplicar las validaciones del esquema, incluida la obligatoriedad del rol.
@@ -110,11 +111,73 @@ aplicar las validaciones del esquema, incluida la obligatoriedad del rol.
 Las rutas de cuentas mantienen sus envoltorios HTTP (`users`, `user` o campos
 sueltos), pero utilizan serialización explícita para documentos y resultados lean.
 Las rutas de token confirman el éxito sin devolver el token.
-La quest 149 define creación inicial, sesiones y permisos. La quest 152 define
-suscripciones, trabajador y envíos. Este contrato no autoriza propietarios ni crea
-cuentas iniciales. Los errores de unicidad tienen código MongoDB `11000` y los
+Las suscripciones, el trabajador y los envíos pertenecen a la quest de
+notificaciones. Los errores de unicidad tienen código MongoDB `11000` y los
 fallos de validación usan `mongoose.Error.ValidationError` o `CastError`.
 No conviertas directamente esas excepciones a JSON ni registres sus documentos.
+
+## API de cuentas
+
+El registro público acepta exclusivamente `email`, `password` y `name` opcional.
+Normaliza el correo antes de validarlo. La contraseña nueva contiene al menos
+doce caracteres y como máximo 72 bytes UTF-8, conserva sus espacios y utiliza
+bcrypt con coste 12. Un nombre proporcionado contiene entre uno y cien caracteres
+después de eliminar espacios exteriores. Las modificaciones aplican las mismas
+reglas y rechazan campos desconocidos. Las credenciales de acceso conservan
+compatibilidad con contraseñas anteriores al mínimo nuevo.
+
+| Operación | Cuenta normal | Administrador vigente |
+| --- | --- | --- |
+| POST `/api/users` | Registro público, siempre `user`, sin sesión automática | Igual |
+| GET `/api/users` | 403 | Lista de cuentas |
+| GET `/api/users/[id]` | Solo su cuenta y comidas | Cualquier cuenta y comidas |
+| PATCH `/api/users/[id]` | Solo su email, name y password | Esos campos y role en cualquier cuenta |
+| DELETE `/api/users/[id]` | 403 | Elimina la cuenta y conserva sus comidas |
+| POST/DELETE `/api/users/[id]/token` | Solo su cuenta, cuando se habilita | Cualquier cuenta, cuando se habilita |
+
+Un intento de modificar `role` mediante una cuenta normal devuelve 403, aunque
+se refiera a su propia cuenta. Cambiar `passwordHash` incrementa `authVersion`
+en la misma escritura atómica. Las sesiones anteriores reciben 401 en la
+siguiente operación. La eliminación no borra comidas y la sesión anterior no
+puede acceder a ellas. El comando local `npm run users:promote -- --email <correo>`
+modifica exclusivamente `role`, sin crear cuentas ni contraseñas.
+
+Los envoltorios mantienen `users` para la lista y `user` para detalle con comidas.
+El registro devuelve 201 con `{id,email,name,role}` y `name:null` si falta.
+PATCH mantiene esos campos directos. DELETE confirma con `message` y los tokens
+con `{success:true}`. `PublicUser` conserva `id`, `_id`, email, name opcional,
+role, createdAt y updatedAt. Los identificadores son cadenas y las fechas son ISO.
+Ninguna respuesta incluye hashes, tokens, versiones ni excepciones internas.
+
+| Estado | code | Significado |
+| --- | --- | --- |
+| 400 | `INVALID_INPUT` | JSON, identificador o campos no válidos |
+| 401 | `UNAUTHORIZED` | Sesión ausente, caducada, revocada o cuenta eliminada |
+| 403 | `FORBIDDEN` | Permisos insuficientes |
+| 403 | `FORBIDDEN_ORIGIN` | Origen del navegador no permitido |
+| 404 | `USER_NOT_FOUND` | Cuenta seleccionada inexistente |
+| 409 | `EMAIL_EXISTS` | Correo normalizado duplicado |
+| 429 | `RATE_LIMITED` | Cuota agotada, con `Retry-After` |
+| 503 | `PERSISTENCE_UNAVAILABLE` | Persistencia no verificable |
+| 500 | `INTERNAL_ERROR` | Error inesperado, mensaje genérico |
+
+Las API de cuentas devuelven `{error,code}`, con `error` como mensaje público.
+Auth.js conserva su transporte `{url}` para `signIn`, incluso con 429 y
+`Retry-After`, y mantiene CSRF. Sus cookies utilizan HttpOnly y SameSite=Lax,
+además de Secure con HTTPS. Las rutas de notificaciones deshabilitadas conservan
+su excepción 503 `{code:"NOTIFICATIONS_DISABLED"}` sin MongoDB ni Firebase.
+
+## Pruebas de identidad y acceso
+
+| Requisitos | Pruebas |
+| --- | --- |
+| R1–R2 | registration, auth-session, access-http |
+| R3–R4 | auth-session, session-account, authorization, access-interactive, access-http |
+| R5 | users-promote |
+| R6–R7 | user-permissions, token-permissions, notifications-routes, access-http |
+| R8 | register-form, access-interactive y comprobación de teclado en navegador |
+| R9 | access-limits, login-limits, request-origin, access-interactive, access-http |
+| R10 | Comprobaciones comunes, verify:local y navegador en desarrollo y producción |
 
 ## Meal
 
@@ -155,7 +218,7 @@ públicos, sin importar Mongoose ni configuración privada.
 ## Preparación y ejemplo
 
 `npm run db:prepare` utiliza `prepareDatabase` de `@/server/persistence/prepare`.
-Crea `users`, `meals` y sus índices, sin documentos iniciales. No utiliza
+Crea `users`, `meals`, `access_limits` y sus índices, sin documentos iniciales. No utiliza
 `syncIndexes`, elimina índices ni importa datos anteriores. Si existen documentos
 incompatibles, informa de un fallo y exige corregirlos sin borrarlos automáticamente.
 El comando siempre cierra su conexión. La biblioteca deja la conexión al consumidor.
@@ -174,4 +237,5 @@ Los módulos de configuración privada se importan desde `@/server/config`.
 Los errores de configuración son `Error` con el nombre de la variable.
 Los errores de conexión son `DatabaseConnectionError`. Los errores de datos son
 `ValidationError` o `CastError`. La duplicidad usa el código MongoDB `11000`.
-Estos contratos no prescriben códigos HTTP ni políticas de autorización.
+Los códigos HTTP y permisos de cuentas siguen la matriz anterior. Las operaciones
+del diario conservan sus contratos y la autorización mediante `requireSession`.
