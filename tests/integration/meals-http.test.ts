@@ -82,3 +82,22 @@ it("returns the detail envelope only to the owner or a current administrator", a
   try { await expectError(await admin.request(path), 403, "FORBIDDEN"); }
   finally { await User.updateOne({ _id: adminId }, { role: "admin" }); }
 }, 30000);
+
+it("updates only supplied fields, retaining ownership and allowing empty text", async () => {
+  const { id } = await createMeal();
+  const path = collection + "/" + id;
+  const edit = jsonRequest("PATCH", { date: "2028-02-29", place: "", notes: "", userId: adminId });
+  await expectError(await other.request(path, edit), 403, "FORBIDDEN");
+  await expectError(await owner.request(path, jsonRequest("PATCH", {}, { origin: "https://foreign.example" })), 403, "FORBIDDEN_ORIGIN");
+  for (const body of ["{", "null", "[]", "{}", JSON.stringify({ userId: otherId }), JSON.stringify({ date: "2026-02-29" })]) {
+    await expectError(await owner.request(path, { method: "PATCH", body }), 400, "INVALID_INPUT");
+  }
+
+  const response = await admin.request(path, edit);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ meal: { ...dish, id, userId: ownerId, date: "2028-02-29", place: "", notes: "" } });
+  expect((await (await owner.request(path)).json()).meal).toMatchObject({ id, userId: ownerId, date: "2028-02-29", place: "", notes: "" });
+  const ownedEdit = await owner.request(path, jsonRequest("PATCH", { name: "Salad" }));
+  expect(ownedEdit.status).toBe(200);
+  expect((await ownedEdit.json()).meal).toMatchObject({ name: "Salad", date: "2028-02-29", userId: ownerId });
+});

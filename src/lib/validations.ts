@@ -33,18 +33,7 @@ export const addMealSchema = z.object({
   notes: z.string().optional(),
 });
 
-export const updateMealSchema = z
-  .object({
-    name: z.string().trim().min(1).optional(),
-    date: z
-      .string()
-      .refine(isCivilDate, "Fecha civil inválida: YYYY-MM-DD")
-      .optional(),
-    type: z.enum(mealTypes).optional(),
-    reaction: z.enum(mealReactions).optional(),
-    place: z.string().optional(),
-    notes: z.string().optional(),
-  })
-  .refine((data) => Object.values(data).some((v) => v !== undefined), {
-    message: "No hay campos para actualizar",
-  });
+export const updateMealSchema = addMealSchema.partial().refine(
+  (data) => Object.keys(data).length > 0,
+  { message: "No hay campos para actualizar" },
+);

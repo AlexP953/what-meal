@@ -6,7 +6,7 @@ vi.mock("@/lib/authz", () => ({
   forbid: () => Response.json({}, { status: 403 }),
 }));
 vi.mock("@/lib/db", () => ({ dbConnect: async () => undefined }));
-vi.mock("@/server/persistence/meal", async (importOriginal) => ({ ...await importOriginal<typeof import("@/server/persistence/meal")>(), Meal: { findById: async () => null } }));
+vi.mock("@/server/persistence/meal", async (importOriginal) => ({ ...await importOriginal<typeof import("@/server/persistence/meal")>(), Meal: { findById: () => ({ lean: async () => null }) } }));
 
 import { PATCH } from "@/app/api/meals/[id]/route";
 import { authConfig } from "@/lib/auth.config";
@@ -17,7 +17,7 @@ describe("framework consumers", () => {
       params: Promise.resolve({ id: "507f1f77bcf86cd799439011" }),
     });
     expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({ error: "Meal not found" });
+    expect(await response.json()).toEqual({ error: "Comida no encontrada", code: "MEAL_NOT_FOUND" });
   });
 
   it("preserves the existing JWT identity and role", async () => {

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MealLean } from "../types";
 import { TrashIcon } from "@heroicons/react/24/outline";
 
-import type { MealReaction as Reaction, MealType } from "@/shared/meal";
+import type { EditedMeal, MealReaction as Reaction, MealType } from "@/shared/meal";
 
 export default function EditMealModal({
   open,
@@ -51,8 +51,8 @@ export default function EditMealModal({
     const date = String(fd.get("date") || "");
     const type = String(fd.get("type") || "") as MealType;
     const reaction = String(fd.get("reaction") || "") as Reaction;
-    const place = (String(fd.get("place") || "").trim() || undefined) as string | undefined;
-    const notes = (String(fd.get("notes") || "").trim() || undefined) as string | undefined;
+    const place = String(fd.get("place") || "").trim();
+    const notes = String(fd.get("notes") || "").trim();
 
     if (!name) return setError("El nombre es obligatorio");
     if (!date) return setError("La fecha es obligatoria");
@@ -67,36 +67,25 @@ export default function EditMealModal({
         body: JSON.stringify({ name, date, type, reaction, place, notes }),
       });
 
-      const raw = await res.text();
-      let json: { error?: string; message?: string; meal?: Partial<MealLean> } | null = null;
-      try {
-        json = raw ? JSON.parse(raw) : null;
-      } catch {
-        if (!res.ok) throw new Error(raw || `HTTP ${res.status}`);
-      }
-
-      if (!res.ok) {
-        const msg = json?.error || json?.message || `HTTP ${res.status}`;
-        throw new Error(msg);
-      }
-
-      const m = json?.meal ?? {};
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "No se pudo actualizar la comida");
+      const updatedMeal = json?.meal as EditedMeal | undefined;
+      if (!updatedMeal?.id || !updatedMeal.userId) throw new Error("La respuesta de la edición está incompleta");
       const updated: MealLean = {
-        _id: String(m._id ?? meal!._id),
-        userId: String(m.userId ?? meal!.userId),
-        name: String(m.name ?? name),
-        date: String(m.date ?? date),
-        type: (m.type ?? type) as MealLean["type"],
-        reaction: (m.reaction ?? reaction) as MealLean["reaction"],
-        place: m.place ?? place,
-        notes: m.notes ?? notes,
+        _id: updatedMeal.id,
+        userId: updatedMeal.userId,
+        name: updatedMeal.name,
+        date: updatedMeal.date,
+        type: updatedMeal.type,
+        reaction: updatedMeal.reaction,
+        place: updatedMeal.place ?? undefined,
+        notes: updatedMeal.notes ?? undefined,
       };
 
       onUpdated(updated);
       onClose();
     } catch (err) {
       setError((err instanceof Error ? err.message : "") || "No se pudo actualizar el meal");
-      console.error("Update meal error:", err);
     } finally {
       setSubmitting(false);
     }
