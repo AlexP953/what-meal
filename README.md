@@ -292,6 +292,69 @@ cuando termines y registra solo el resultado de las comprobaciones.
 
 Para programar y verificar copias, consulta [el procedimiento de copia](docs/persistence.md#copias-del-despliegue).
 
+### Actualización y recuperación
+
+Ensaya cada cambio en un proyecto desechable con un proxy aislado o en otro
+servidor. Registra la revisión de What Meal, las imágenes de MongoDB y Caddy,
+y el nombre del proyecto. Conserva el
+nombre, los secretos y los volúmenes al aplicar el cambio al servidor. Haz una
+copia verificada antes de cada actualización y conserva la revisión que la
+generó. Sigue el [ensayo de restauración](docs/persistence.md#ensayo-de-restauración)
+para comprobar la copia antes de usarla para una recuperación.
+
+Prepara dos revisiones separadas si cambian tanto la aplicación como MongoDB.
+Primero usa una revisión de What Meal que conserve la imagen anterior de MongoDB.
+Desde la revisión nueva, usa las mismas variables de la instalación. Sustituye
+`whatmeal-deploy` por el nombre que usaste al instalar.
+
+```bash
+git rev-parse HEAD
+docker compose -p whatmeal-deploy -f compose.deploy.yml build whatmeal db-prepare &&
+docker compose -p whatmeal-deploy -f compose.deploy.yml run --rm --no-deps db-prepare &&
+docker compose -p whatmeal-deploy -f compose.deploy.yml up -d --wait --no-deps whatmeal
+```
+
+Comprueba el inicio de sesión, una comida existente y la escritura de una
+comida ficticia. Para actualizar MongoDB dentro de la serie 8.0, consulta las
+notas del parche y utiliza una revisión con la imagen nueva fijada por digest.
+Si hubo una actualización de serie reciente, verifica que la versión de
+compatibilidad de funcionalidades ya está estable antes de continuar.
+Detén la aplicación durante el cambio de MongoDB. Mantén suspendidos también
+los demás escritores hasta comprobar la base.
+
+```bash
+docker compose -p whatmeal-deploy -f compose.deploy.yml pull mongo &&
+docker compose -p whatmeal-deploy -f compose.deploy.yml stop whatmeal &&
+docker compose -p whatmeal-deploy -f compose.deploy.yml up -d --wait mongo &&
+docker compose -p whatmeal-deploy -f compose.deploy.yml run --rm --no-deps mongo-provision &&
+docker compose -p whatmeal-deploy -f compose.deploy.yml run --rm --no-deps db-prepare &&
+docker compose -p whatmeal-deploy -f compose.deploy.yml up -d --wait --no-deps whatmeal
+```
+
+Repite las comprobaciones de lectura y escritura. En un ensayo, usa la prueba
+del diario para comparar sus identificadores, propietarios, fechas y contenido
+antes y después de cada paso.
+
+Si falla solo la actualización de What Meal y la revisión anterior sigue siendo
+compatible con la base, vuelve a esa revisión y repite el bloque de actualización
+de la aplicación. Comprueba el diario antes de reanudar el servicio.
+
+Si falla MongoDB, conserva el volumen afectado. Restaura la copia anterior al
+cambio con la revisión que la creó y comprueba el diario en el proyecto nuevo.
+Antes de dirigir el tráfico al proyecto recuperado, suspende las escrituras
+en el original y configura los secretos recuperados y el mismo origen HTTPS
+en What Meal y Caddy. Si ambos proyectos comparten servidor, detén primero el
+proxy anterior para liberar los puertos web. Los datos creados después de la
+copia requieren recuperación aparte. Los cambios de serie de MongoDB requieren
+un procedimiento propio.
+
+`restart`, `up --force-recreate` y `down` conservan los volúmenes del despliegue.
+`down --volumes`, `docker volume rm` y ciertas variantes de `docker volume prune`
+pueden eliminar datos persistentes. Usa esas operaciones solo para recursos
+desechables identificados o para una retirada deliberada.
+
+[Actualización de parche de MongoDB 8.0](https://www.mongodb.com/docs/v8.0/tutorial/upgrade-revision/).
+
 ## MongoDB local
 
 Instala Docker Engine o Docker Desktop con Compose 2.24 o posterior.
