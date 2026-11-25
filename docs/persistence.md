@@ -30,6 +30,23 @@ Cada archivo genera una base `whatmeal_test_<uuid>`. La limpieza comprueba el no
 exacto de su base antes de eliminarla y siempre cierra la conexión.
 Las pruebas nunca utilizan `MONGODB_DB` para elegir un destino de limpieza.
 
+## Límites de acceso
+
+`access_limits` comparte ventanas móviles entre procesos mediante actualizaciones
+atómicas de un documento por clave. El índice TTL sobre `expiresAt` elimina
+documentos inactivos. Las consultas excluyen eventos caducados sin depender del TTL.
+La preparación crea el índice sin eventos iniciales.
+
+El registro reserva veinte intentos por hora en una cuota compartida para todos
+los orígenes no verificables. No utiliza cabeceras de IP del cliente. Una persona
+puede agotar temporalmente esa cuota para toda la instalación.
+El acceso reserva diez intentos por correo durante quince minutos. La clave usa
+HMAC con `AUTH_SECRET` sobre el correo normalizado, sin almacenar el correo.
+Una reserva pendiente caduca en sesenta segundos. Su finalización es única y
+atómica. Un acceso correcto libera exclusivamente su reserva y conserva fallos
+previos. Un fallo confirmado ocupa su plaza durante quince minutos desde su
+confirmación. Una reserva caducada no permite emitir una sesión.
+
 ## User
 
 Importa `User`, `UserRecord` y `serializeUser` desde
