@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import type { ListedMeal, MealReaction as Reaction, MealType } from "@/shared/meal";
+import { EXPECTED_MEAL_ACCOUNT_HEADER, type ListedMeal, type MealReaction as Reaction, type MealType } from "@/shared/meal";
+import { isDiarySessionLost } from "./diary-client";
 
 export default function AddMealModal({
   onClose,
@@ -56,7 +57,7 @@ export default function AddMealModal({
     try {
       const res = await fetch("/api/meals", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", [EXPECTED_MEAL_ACCOUNT_HEADER]: userId },
         body: JSON.stringify({
           name,
           date,
@@ -67,7 +68,7 @@ export default function AddMealModal({
         }),
       });
 
-      if (res.status === 401) {
+      if (isDiarySessionLost(res)) {
         onSessionLost();
         return;
       }

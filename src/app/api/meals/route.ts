@@ -5,7 +5,7 @@ import { Meal, serializeListedMeal, type MealRecord } from "@/server/persistence
 import { addMealSchema, mealFiltersSchema } from "@/lib/validations";
 import { requireSession, isAdmin } from "@/lib/authz";
 import { apiError, dataError, readJson } from "@/server/http-errors";
-import { checkMutationOrigin } from "@/server/request-origin";
+import { checkMealMutation } from "@/server/meal-mutation";
 
 export async function GET(req: Request) {
   try {
@@ -52,8 +52,8 @@ export async function POST(req: Request) {
   try {
     const { session, error } = await requireSession();
     if (error) return error;
-    const originError = checkMutationOrigin(req);
-    if (originError) return originError;
+    const mutationError = checkMealMutation(req, session.user!.id);
+    if (mutationError) return mutationError;
 
     const parsed = addMealSchema.safeParse(await readJson(req));
     if (!parsed.success) return apiError(400, "INVALID_INPUT", "Datos no válidos");

@@ -1,9 +1,8 @@
-import type { ListedMeal, MealReaction, MealType } from "@/shared/meal";
-import type { MealLean } from "../types";
+import { isCivilDate, type ListedMeal, type MealReaction, type MealType } from "@/shared/meal";
 
-type DiaryFilters = {
+export type DiaryFilters = {
   type: MealType | "";
-  reactions: MealReaction[];
+  reactions: readonly MealReaction[];
   dateFrom: string;
   dateTo: string;
   sortDir: "asc" | "desc";
@@ -18,11 +17,48 @@ export function diarySearch({ type, reactions, dateFrom, dateTo, sortDir }: Diar
   return search;
 }
 
-export function toMealView({ id, user, name, date, type, reaction, place, notes }: ListedMeal): MealLean {
-  return { _id: id, userId: user, name, date, type, reaction, place: place ?? undefined, notes: notes ?? undefined };
+export const defaultDiaryFilters: DiaryFilters = {
+  type: "", reactions: [], dateFrom: "", dateTo: "", sortDir: "desc",
+};
+
+export type DiaryMeal = Omit<ListedMeal, "updatedAt">;
+export type DiaryChange = { meal: DiaryMeal } | { id: string };
+
+export function dateRangeError(from: string, to: string) {
+  if ((from && !isCivilDate(from)) || (to && !isCivilDate(to))) {
+    return "Introduce fechas válidas en formato YYYY-MM-DD.";
+  }
+  return from && to && from > to ? "La fecha Desde debe ser anterior o igual a Hasta." : "";
 }
 
-export async function readDiary(search: string, userId: string, signal: AbortSignal): Promise<MealLean[] | null> {
+function compareText(a: string, b: string) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+export function applyDiaryChange(meals: DiaryMeal[], filters: DiaryFilters, change: DiaryChange) {
+  const id = "meal" in change ? change.meal.id : change.id;
+  const candidates = meals.filter(meal => meal.id !== id);
+  if ("meal" in change) candidates.push(change.meal);
+
+  const { type, reactions, dateFrom, dateTo, sortDir } = filters;
+  const dateDirection = sortDir === "asc" ? 1 : -1;
+  return candidates.filter(meal =>
+    (!type || meal.type === type) &&
+    (!reactions.length || reactions.includes(meal.reaction)) &&
+    (!dateFrom || meal.date >= dateFrom) &&
+    (!dateTo || meal.date <= dateTo)
+  ).sort((a, b) =>
+    dateDirection * compareText(a.date, b.date) ||
+    compareText(b.createdAt, a.createdAt) ||
+    compareText(b.id, a.id)
+  );
+}
+
+export function isDiarySessionLost(response: Response) {
+  return response.status === 401 || response.status === 409;
+}
+
+export async function readDiary(search: string, userId: string, signal: AbortSignal): Promise<DiaryMeal[] | null> {
   const response = await fetch(`/api/meals?${search}`, { signal, cache: "no-store" });
   signal.throwIfAborted();
   if (response.status === 401) return null;
@@ -32,7 +68,7 @@ export async function readDiary(search: string, userId: string, signal: AbortSig
   signal.throwIfAborted();
   // A cookie can change before the session provider reports the new account.
   if (meals.some(meal => meal.user !== userId)) return null;
-  return meals.map(toMealView);
+  return meals;
 }
 
 export function formatMealDate(date: string): string {

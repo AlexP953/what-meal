@@ -1,3 +1,5 @@
+export const EXPECTED_MEAL_ACCOUNT_HEADER = "X-Expected-Account";
+
 export const mealTypes = ["breakfast", "lunch", "dinner", "snack"] as const;
 export const mealReactions = ["good", "bad", "neutral"] as const;
 export type MealType = typeof mealTypes[number];

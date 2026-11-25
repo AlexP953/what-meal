@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { MealLean } from "../types";
 import { TrashIcon } from "@heroicons/react/24/outline";
 
-import type { EditedMeal, MealReaction as Reaction, MealType } from "@/shared/meal";
+import { EXPECTED_MEAL_ACCOUNT_HEADER, type EditedMeal, type MealReaction as Reaction, type MealType } from "@/shared/meal";
+import { isDiarySessionLost, type DiaryMeal } from "./diary-client";
 
 export default function EditMealModal({
   onClose,
@@ -12,10 +12,12 @@ export default function EditMealModal({
   onUpdated,
   onDeleted,
   onSessionLost,
+  userId,
 }: {
+  userId: string;
   onSessionLost: () => void;
   onClose: () => void;
-  meal: MealLean;
+  meal: DiaryMeal;
   onUpdated: (meal: EditedMeal) => void;
   onDeleted: (mealId: string) => void;
 }) {
@@ -58,13 +60,13 @@ export default function EditMealModal({
 
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/meals/${meal._id}`, {
+      const res = await fetch(`/api/meals/${meal.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", [EXPECTED_MEAL_ACCOUNT_HEADER]: userId },
         body: JSON.stringify({ name, date, type, reaction, place, notes }),
       });
 
-      if (res.status === 401) {
+      if (isDiarySessionLost(res)) {
         onSessionLost();
         return;
       }
@@ -87,8 +89,11 @@ export default function EditMealModal({
     setError("");
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/meals/${meal._id}`, { method: "DELETE" });
-      if (res.status === 401) {
+      const res = await fetch(`/api/meals/${meal.id}`, {
+        method: "DELETE",
+        headers: { [EXPECTED_MEAL_ACCOUNT_HEADER]: userId },
+      });
+      if (isDiarySessionLost(res)) {
         onSessionLost();
         return;
       }
@@ -96,7 +101,7 @@ export default function EditMealModal({
         const json = await res.json().catch(() => null);
         throw new Error(json?.error || "No se pudo eliminar la comida");
       }
-      onDeleted(meal._id);
+      onDeleted(meal.id);
       onClose();
     } catch (err) {
       setError((err instanceof Error ? err.message : "") || "No se pudo eliminar el meal");
@@ -200,7 +205,7 @@ export default function EditMealModal({
             </label>
             <input
               name="place"
-              defaultValue={meal.place}
+              defaultValue={meal.place ?? ""}
               className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
               placeholder="Restaurante Italiano"
             />
@@ -212,7 +217,7 @@ export default function EditMealModal({
             </label>
             <textarea
               name="notes"
-              defaultValue={meal.notes}
+              defaultValue={meal.notes ?? ""}
               rows={3}
               className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
               placeholder="¿Síntomas, sensaciones, etc.?"

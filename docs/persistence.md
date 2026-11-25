@@ -222,6 +222,11 @@ identificador. Un identificador ajeno existente devuelve 403 a una cuenta normal
 POST, PATCH y DELETE aplican la comprobación de origen de cuentas y aceptan una
 sesión válida sin cabeceras de origen ni Fetch Metadata.
 
+Los formularios web incluyen `X-Expected-Account` con la cuenta que muestra el
+diario. Si se envía, el servidor exige que coincida con la identidad de la
+sesión verificada antes de escribir. Los clientes existentes pueden omitir la
+cabecera. La sesión verificada sigue determinando la identidad y los permisos.
+
 | Operación | Entrada | Resultado |
 | --- | --- | --- |
 | POST `/api/meals` | Objeto JSON con `name`, `date`, `type` y `reaction` obligatorios, y `place` y `notes` opcionales | 201 con la comida directamente y los alias `id` y `user` |
@@ -246,7 +251,10 @@ inclusivos y funcionan por separado. `sortDir` acepta `asc` y `desc` y solo
 cambia el orden de `date`. Por defecto, se muestran las fechas más recientes.
 Los empates se ordenan por `createdAt` y luego por identificador, ambos
 descendentes. La misma consulta determina los resultados de la pantalla después
-de cada mutación confirmada.
+de cada mutación confirmada. La pantalla aplica la respuesta confirmada a las
+filas visibles mientras vuelve a consultar el servidor. Si falla la consulta,
+la pantalla conserva el cambio confirmado y ofrece reintentar la consulta.
+Las fechas de los filtros se validan en el diálogo antes de aplicar el rango.
 
 | Estado | code | Significado |
 | --- | --- | --- |
@@ -255,6 +263,7 @@ de cada mutación confirmada.
 | 403 | `FORBIDDEN` | Comida ajena para la cuenta normal |
 | 403 | `FORBIDDEN_ORIGIN` | Origen rechazado para la mutación |
 | 404 | `MEAL_NOT_FOUND` | Comida inexistente |
+| 409 | `SESSION_ACCOUNT_CHANGED` | La cuenta esperada difiere de la sesión verificada |
 | 503 | `PERSISTENCE_UNAVAILABLE` | Persistencia temporalmente indisponible |
 | 500 | `INTERNAL_ERROR` | Fallo inesperado |
 

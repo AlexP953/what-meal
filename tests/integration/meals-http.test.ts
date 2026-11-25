@@ -205,3 +205,26 @@ it("combines inclusive filters and sorts deterministically within the authorized
     await expectError(await admin.request(collection + "?" + invalid), 400, "INVALID_INPUT");
   }
 });
+
+it("rejects mutations from a stale form before writing, even with an administrator cookie", async () => {
+  const created = await createMeal();
+  const path = collection + "/" + created.id;
+  const stale = { "X-Expected-Account": ownerId };
+  const count = await Meal.countDocuments();
+  for (const account of ["", `${adminId}, ${adminId}`]) {
+    await expectError(await admin.request(collection, jsonRequest("POST", dish, { "X-Expected-Account": account })), 409, "SESSION_ACCOUNT_CHANGED");
+  }
+  await expectError(await admin.request(collection, jsonRequest("POST", dish, stale)), 409, "SESSION_ACCOUNT_CHANGED");
+  await expectError(await admin.request(path, jsonRequest("PATCH", { name: "Wrong account" }, stale)), 409, "SESSION_ACCOUNT_CHANGED");
+  await expectError(await admin.request(path, { method: "DELETE", headers: stale }), 409, "SESSION_ACCOUNT_CHANGED");
+  expect(await Meal.countDocuments()).toBe(count);
+  expect((await (await owner.request(path)).json()).meal.name).toBe(dish.name);
+
+  const expectedActor = { "X-Expected-Account": adminId };
+  const post = await admin.request(collection, jsonRequest("POST", { ...dish, userId: ownerId }, expectedActor));
+  expect(post.status).toBe(201);
+  expect((await post.json()).user).toBe(adminId);
+  await expectError(await other.request(path, { method: "DELETE", headers: { "X-Expected-Account": otherId } }), 403, "FORBIDDEN");
+  expect((await admin.request(path, jsonRequest("PATCH", { name: "Confirmed" }, expectedActor))).status).toBe(200);
+  expect((await admin.request(path, { method: "DELETE", headers: expectedActor })).status).toBe(200);
+});

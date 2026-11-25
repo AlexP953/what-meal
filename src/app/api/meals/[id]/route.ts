@@ -6,7 +6,7 @@ import { updateMealSchema } from "@/lib/validations";
 import { isValidObjectId } from "mongoose";
 import type { Session } from "next-auth";
 import { apiError, dataError, readJson } from "@/server/http-errors";
-import { checkMutationOrigin } from "@/server/request-origin";
+import { checkMealMutation } from "@/server/meal-mutation";
 import type { EditedMeal } from "@/shared/meal";
 
 function mealNotFound() {
@@ -26,8 +26,8 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
   try {
     const { session, error } = await requireSession();
     if (error) return error;
-    const originError = checkMutationOrigin(req);
-    if (originError) return originError;
+    const mutationError = checkMealMutation(req, session.user!.id);
+    if (mutationError) return mutationError;
 
     const { id } = await context.params;
     const result = await accessibleMeal(id, session);
@@ -63,8 +63,8 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
   try {
     const { session, error } = await requireSession();
     if (error) return error;
-    const originError = checkMutationOrigin(req);
-    if (originError) return originError;
+    const mutationError = checkMealMutation(req, session.user!.id);
+    if (mutationError) return mutationError;
 
     const { id } = await context.params;
     const result = await accessibleMeal(id, session);
