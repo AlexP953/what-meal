@@ -11,7 +11,8 @@
     "test:integration": "vitest run --project integration",
     "typecheck": "tsc --noEmit",
     "verify:local": "bash scripts/verify-local.sh",
-    "db:prepare": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/db-prepare.ts"
+    "db:prepare": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/db-prepare.ts",
+    "users:promote": "node --env-file-if-exists=.env.local --conditions=react-server --import tsx scripts/users-promote.ts"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

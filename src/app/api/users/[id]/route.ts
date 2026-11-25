@@ -1,142 +1,74 @@
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import { serializeMeal, type MealRecord } from "@/server/persistence/meal";
-import { User, serializeUser, type UserRecord } from "@/server/persistence/user";
+import { User, serializeUser } from "@/server/persistence/user";
 import { requireSession, isAdmin, forbid } from "@/lib/authz";
-import { updateUserSchema } from "@/lib/validations";
+import { updateUserSchema, updateUserAdminSchema } from "@/lib/validations";
 import bcrypt from "bcryptjs";
-import { z } from "zod";
 import { isValidObjectId } from "mongoose";
+import { checkMutationOrigin } from "@/server/request-origin";
+import { accountError, apiError, readJson } from "@/server/http-errors";
 
-const updateUserAdminSchema = updateUserSchema.extend({
-  role: z.enum(["admin", "user"]).optional(),
-});
+type Context = { params: Promise<{ id: string }> };
 
-export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
+export async function PATCH(req: Request, context: Context) {
   const { session, error } = await requireSession();
-  const { id } = await context.params;
-
   if (error) return error;
-
-  if (!session?.user) return forbid();
-
-  const sameUser = session!.user.id === id;
+  const originError = checkMutationOrigin(req);
+  if (originError) return originError;
+  const { id } = await context.params;
   const admin = isAdmin(session);
-  if (!admin && !sameUser) return forbid();
-
-  const body = await req.json();
-  const parsed = (admin ? updateUserAdminSchema : updateUserSchema).safeParse(
-    body
-  );
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
-  }
-  const { email, name, password, role } = parsed.data as z.infer<typeof updateUserAdminSchema>;
-
+  if (!admin && session.user.id !== id) return forbid();
+  if (!isValidObjectId(id)) return apiError(400, "INVALID_INPUT", "Identificador no válido");
+  const body = await readJson(req);
+  if (!admin && body && typeof body === "object" && Object.hasOwn(body, "role")) return forbid();
+  const parsed = (admin ? updateUserAdminSchema : updateUserSchema).safeParse(body);
+  if (!parsed.success) return apiError(400, "INVALID_INPUT", "Comprueba los campos de la cuenta");
+  const { email, name, password, role } = parsed.data as { email?: string; name?: string; password?: string; role?: "admin" | "user" };
   try {
     await dbConnect();
-
     const update: Record<string, string> = {};
-    if (email) update.email = email.toLowerCase().trim();
-    if (name) update.name = name;
-    if (password) update.passwordHash = await bcrypt.hash(password, 12);
-    if (admin && role) update.role = role;
-
-    if (update.email) {
-      const dup = await User.findOne({
-        email: update.email,
-        _id: { $ne: id },
-      }).lean();
-      if (dup)
-        return NextResponse.json({ error: "Email ya en uso" }, { status: 409 });
-    }
-
-    const user = await User.findByIdAndUpdate(
-      id,
-      { $set: update },
-      {
-        returnDocument: "after",
-        runValidators: true,
-        projection: { email: 1, name: 1, role: 1, createdAt: 1, updatedAt: 1 },
-      }
-    ).lean<UserRecord | null>();
-
-    if (!user)
-      return NextResponse.json(
-        { error: "Usuario no encontrado" },
-        { status: 404 }
-      );
-
+    if (email !== undefined) update.email = email;
+    if (name !== undefined) update.name = name;
+    if (password !== undefined) update.passwordHash = await bcrypt.hash(password, 12);
+    if (admin && role !== undefined) update.role = role;
+    // Hash replacement and revocation version must change in the same atomic write.
+    const user = await User.findByIdAndUpdate(id, { $set: update, ...(password !== undefined ? { $inc: { authVersion: 1 } } : {}) }, {
+      returnDocument: "after", runValidators: true,
+      projection: { email: 1, name: 1, role: 1, createdAt: 1, updatedAt: 1 },
+    }).lean();
+    if (!user) return apiError(404, "USER_NOT_FOUND", "Usuario no encontrado");
     const publicUser = serializeUser(user);
-    return NextResponse.json(
-      {
-        id: publicUser.id,
-        email: publicUser.email,
-        name: publicUser.name ?? null,
-        role: publicUser.role,
-      },
-      { status: 200 }
-    );
-  } catch {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
-  }
+    return NextResponse.json({ id: publicUser.id, email: publicUser.email, name: publicUser.name ?? null, role: publicUser.role });
+  } catch (error) { return accountError(error); }
 }
 
-export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
-  const { id } = await context.params;
-
+export async function DELETE(req: Request, context: Context) {
   const { session, error } = await requireSession();
   if (error) return error;
-
+  const originError = checkMutationOrigin(req);
+  if (originError) return originError;
   if (!isAdmin(session)) return forbid();
-
+  const { id } = await context.params;
+  if (!isValidObjectId(id)) return apiError(400, "INVALID_INPUT", "Identificador no válido");
   try {
     await dbConnect();
-
     const deleted = await User.findByIdAndDelete(id).lean();
-
-    if (!deleted) {
-      return NextResponse.json(
-        { error: "Usuario no encontrado" },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({ message: "Usuario eliminado" }, { status: 200 });
-  } catch {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
-  }
+    if (!deleted) return apiError(404, "USER_NOT_FOUND", "Usuario no encontrado");
+    return NextResponse.json({ message: "Usuario eliminado" });
+  } catch (error) { return accountError(error); }
 }
 
-export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, context: Context) {
   const { session, error } = await requireSession();
   if (error) return error;
-
   const { id } = await context.params;
-
-  const isSelf = session.user?.id === id;
-  if (!isAdmin(session) && !isSelf) return forbid();
-
+  if (!isAdmin(session) && session.user.id !== id) return forbid();
+  if (!isValidObjectId(id)) return apiError(400, "INVALID_INPUT", "Identificador no válido");
   try {
     await dbConnect();
-
-    if (!isValidObjectId(id)) {
-      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
-    }
-
-    const user = await User.findById(id)
-      .select("-passwordHash -fcmToken -__v")
-      .populate<{ meals: MealRecord[] }>({
-        path: "meals",
-        options: { sort: { date: -1, createdAt: -1 } },
-      });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    return NextResponse.json({ user: { ...serializeUser(user), meals: (user.meals ?? []).map(serializeMeal) } }, { status: 200 });
-  } catch {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
-  }
+    const user = await User.findById(id).select("-passwordHash -fcmToken -__v").populate<{ meals: MealRecord[] }>({ path: "meals", options: { sort: { date: -1, createdAt: -1 } } });
+    if (!user) return apiError(404, "USER_NOT_FOUND", "Usuario no encontrado");
+    return NextResponse.json({ user: { ...serializeUser(user), meals: (user.meals ?? []).map(serializeMeal) } });
+  } catch (error) { return accountError(error); }
 }

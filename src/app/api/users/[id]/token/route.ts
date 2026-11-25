@@ -3,61 +3,48 @@ import { notificationsDisabled } from "@/server/notifications/disabled";
 import { NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import { User } from "@/app/models/User";
-import mongoose from "mongoose";
+import { isValidObjectId } from "mongoose";
+import { z } from "zod";
+import { requireSession, isAdmin, forbid } from "@/lib/authz";
+import { checkMutationOrigin } from "@/server/request-origin";
+import { accountError, apiError, readJson } from "@/server/http-errors";
 
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  if (!notificationsEnabled) return notificationsDisabled();
-  const { id } = await params;
-  const { token } = await req.json();
+type Context = { params: Promise<{ id: string }> };
+const tokenSchema = z.strictObject({ token: z.string().min(1).max(4096) });
 
-  if (!token) {
-    return NextResponse.json({ error: "Token requerido" }, { status: 400 });
-  }
-
-  await dbConnect();
-
-  const objectId = new mongoose.Types.ObjectId(id);
-
-  const user = await User.findByIdAndUpdate(
-    objectId,
-    { fcmToken: token },
-    { returnDocument: "after" }
-  );
-
-  if (!user) {
-    return NextResponse.json(
-      { error: "Usuario no encontrado" },
-      { status: 404 }
-    );
-  }
-
-  return NextResponse.json({ success: true });
+async function authorizeToken(req: Request, context: Context) {
+  const { session, error } = await requireSession();
+  if (error) return { error };
+  const originError = checkMutationOrigin(req);
+  if (originError) return { error: originError };
+  const { id } = await context.params;
+  if (!isAdmin(session) && session.user.id !== id) return { error: forbid() };
+  if (!isValidObjectId(id)) return { error: apiError(400, "INVALID_INPUT", "Identificador no válido") };
+  return { id };
 }
 
-export async function DELETE(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: Request, context: Context) {
   if (!notificationsEnabled) return notificationsDisabled();
-  const { id } = await params;
-  await dbConnect();
-  const objectId = new mongoose.Types.ObjectId(id);
+  const authorized = await authorizeToken(req, context);
+  if (authorized.error) return authorized.error;
+  const parsed = tokenSchema.safeParse(await readJson(req));
+  if (!parsed.success) return apiError(400, "INVALID_INPUT", "Token no válido");
+  try {
+    await dbConnect();
+    const user = await User.findByIdAndUpdate(authorized.id, { $set: { fcmToken: parsed.data.token } }, { returnDocument: "after", runValidators: true, projection: { _id: 1 } }).lean();
+    if (!user) return apiError(404, "USER_NOT_FOUND", "Usuario no encontrado");
+    return NextResponse.json({ success: true });
+  } catch (error) { return accountError(error); }
+}
 
-  const user = await User.findByIdAndUpdate(
-    objectId,
-    { fcmToken: null },
-    { returnDocument: "after" }
-  );
-
-  if (!user) {
-    return NextResponse.json(
-      { error: "Usuario no encontrado" },
-      { status: 404 }
-    );
-  }
-
-  return NextResponse.json({ success: true });
+export async function DELETE(req: Request, context: Context) {
+  if (!notificationsEnabled) return notificationsDisabled();
+  const authorized = await authorizeToken(req, context);
+  if (authorized.error) return authorized.error;
+  try {
+    await dbConnect();
+    const user = await User.findByIdAndUpdate(authorized.id, { $set: { fcmToken: null } }, { returnDocument: "after", runValidators: true, projection: { _id: 1 } }).lean();
+    if (!user) return apiError(404, "USER_NOT_FOUND", "Usuario no encontrado");
+    return NextResponse.json({ success: true });
+  } catch (error) { return accountError(error); }
 }

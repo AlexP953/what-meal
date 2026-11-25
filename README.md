@@ -28,7 +28,10 @@ npm run dev -- --hostname 127.0.0.1
 
 Abre `http://localhost:3000/login`. La pantalla de acceso debe aparecer sin
 configurar Firebase ni solicitar permisos de notificaciones. La base nueva no
-contiene cuentas. Detén desarrollo con Ctrl+C antes de continuar:
+contiene cuentas. Abre `/register` para crear una cuenta normal con correo,
+contraseña de al menos doce caracteres (máximo 72 bytes UTF-8) y nombre opcional.
+El registro confirma la creación en `/login`, sin iniciar sesión automáticamente.
+Detén desarrollo con Ctrl+C antes de continuar:
 
 ```bash
 docker compose stop mongo
@@ -44,9 +47,11 @@ aplicación. `npm start` la reinicia sin eliminar documentos. Reinicia MongoDB c
 contenedores y conserva el volumen. Consulta MongoDB local antes de eliminar datos.
 
 Las pruebas verifican CRUD, índices, serialización y recuperación de conexión.
-Cada archivo de integración utiliza una base generada `whatmeal_test_*` y elimina
-solo esa base. `TEST_MONGODB_URI` permite usar otro servidor local para las pruebas.
+Las pruebas de integración utilizan bases generadas `whatmeal_test_*` y solo
+eliminan las bases que crean. `TEST_MONGODB_URI` permite usar otro servidor local.
 No configures esa variable con servicios anteriores o bases de producción.
+Las pruebas HTTP ejecutan Next.js en carpetas temporales sin archivos `.env`
+del checkout y con las notificaciones desactivadas al compilar y arrancar.
 
 ## Entorno
 
@@ -54,6 +59,23 @@ Utiliza Node.js **24.22.3 LTS** y npm **11.19.1**, distribuido con esa versión.
 Con nvm, ejecuta `nvm install` y `nvm use`. Comprueba `node --version` y
 `npm --version` antes de ejecutar `npm ci`. El archivo de bloqueo se versiona.
 No utilices `--force` ni `--legacy-peer-deps`.
+
+## Primer administrador y recuperación
+
+Crea primero una cuenta normal en `/register`. En el servidor autorizado,
+desde la carpeta del proyecto y con `.env.local` configurado, ejecuta:
+
+```bash
+npm run users:promote -- --email <correo>
+```
+
+El comando normaliza el correo, exige una cuenta existente y cambia únicamente
+su rol a `admin`. No crea cuentas ni contraseñas. Repetirlo es seguro y confirma
+la promoción sin mostrar credenciales. Utiliza `MONGODB_URI` y `MONGODB_DB`.
+La siguiente operación protegida utiliza el rol nuevo, sin exigir otro acceso.
+Si no queda ningún administrador, registra una cuenta normal y ejecuta el mismo
+comando para recuperar la administración. No existe una ruta HTTP de promoción
+local. Los administradores también conservan la gestión mediante las API.
 
 ## Comandos
 
@@ -103,6 +125,8 @@ módulos exclusivos del servidor. Las pruebas de integración se ejecutan en ser
 Las rutas dinámicas resuelven `params` como promesa, conforme a
 [Next.js](https://nextjs.org/docs/app/api-reference/file-conventions/route#context-optional).
 Los tipos de Auth.js amplían los campos `id` y `role` del contrato JWT existente.
+El JWT incorpora una versión privada y una fecha original para revocar sesiones
+y limitar su duración. Esos campos no pertenecen a la sesión pública.
 
 ## Configuración
 
@@ -116,6 +140,11 @@ Admite servidores múltiples, credenciales codificadas y direcciones SRV.
 Los errores de sintaxis identifican `MONGODB_URI` sin mostrar su contenido.
 El nombre admite letras ASCII, cifras, guiones y guiones bajos, hasta 63 caracteres.
 La autenticación exige un secreto de al menos 32 caracteres.
+En producción, configura `AUTH_URL` con el origen público de la aplicación,
+por ejemplo `https://comidas.example.com`. Auth.js usa ese origen para confiar
+en el host y la aplicación limita las redirecciones al mismo origen. En desarrollo
+local sin `AUTH_URL`, la aplicación usa HTTP y el `Host` directo para comprobar
+el origen, sin utilizar cabeceras reenviadas.
 Cada componente valida sus variables al consumirlas. La compilación no exige
 MongoDB ni credenciales Firebase. Los errores identifican la variable sin su valor.
 Las variables `NEXT_PUBLIC_*` son públicas y nunca contienen secretos.
@@ -136,7 +165,7 @@ No conectan MongoDB ni inicializan Firebase Admin en ese estado.
 Next.js 16.4.6 utiliza React 19.3.1. Se conserva Auth.js 5.0.0-beta.32
 con Credentials y sesiones JWT para evitar sustituir la autenticación.
 Mongoose 9.13.0 conserva MongoDB como motor de persistencia.
-El archivo `src/proxy.ts` conserva el matcher del middleware anterior.
+Las rutas de cuentas verifican la sesión en el servidor mediante `requireSession`.
 
 - [Migración Next.js 16](https://nextjs.org/docs/app/guides/upgrading/version-16).
 - [Compatibilidad Mongoose y MongoDB](https://mongoosejs.com/docs/compatibility.html).
@@ -202,7 +231,48 @@ Después de configurar `.env.local` y arrancar MongoDB, ejecuta `npm run db:prep
 El comando carga `.env.local`, crea las colecciones e índices ausentes y termina
 con `Database prepared.`. Repetirlo conserva documentos e índices adicionales.
 No genera usuarios ni comidas. Una base recién preparada permanece vacía.
-Para acceder con una cuenta nueva debes completar la quest de cuentas 149.
+Abre `/register` para crear la primera cuenta normal y después `/login` para
+acceder. El menú ofrece **Cerrar sesión** y vuelve a `/login`. La sesión permite
+recargar y dura como máximo 24 horas desde el acceso original. Cambiar la
+contraseña invalida todas las sesiones anteriores, incluida la sesión actual.
+Eliminar una cuenta invalida su sesión y conserva sus comidas, sin asignarlas
+a otra cuenta. Consulta la matriz y los errores en [persistencia](docs/persistence.md).
+
+El registro rechaza campos desconocidos y cualquier `role` recibido, incluso
+para la primera cuenta. Las cuentas administrativas se habilitan mediante el
+comando local anterior. El correo se normaliza antes de validar y almacenar.
+Los accesos aceptan contraseñas existentes, aunque sean anteriores al mínimo nuevo.
+
+La instalación comparte veinte intentos de registro por hora cuando no existe
+una dirección de origen verificable. Una persona puede agotar esa cuota para
+toda la instalación. Cada correo dispone de diez fallos de acceso por quince
+minutos. MongoDB comparte los límites entre procesos. Las respuestas limitadas
+incluyen 429 y `Retry-After`, sin distinguir cuentas existentes.
+
+## Verificación del acceso
+
+```bash
+npm test
+npm run test:integration
+npm run typecheck
+npm run lint
+npm run build
+npm audit --audit-level=high
+npm run verify:local
+```
+
+`tests/integration/access-http.test.ts` inicia la aplicación en desarrollo y
+producción sobre bases generadas, con sesiones emitidas y CSRF reales. Compila
+antes de comprobar producción. Comprueba registro sin sesión automática,
+permisos de tres cuentas, cambios de rol, revocación, eliminación y cierre.
+Los procesos de prueba usan puertos locales asignados por el sistema y se detienen
+al terminar. Las demás pruebas cubren concurrencia, caducidad, fallos de conexión,
+orígenes, cookies y el comando de promoción.
+
+La comprobación de navegador completa registro, acceso, recarga y cierre mediante
+teclado en desarrollo y producción. También comprueba consola, etiquetas, errores
+400/409/429, desconexión y recuperación de los formularios. HTTP no sustituye
+esa comprobación de interacción ni la inspección visual.
 
 ## Integración continua
 

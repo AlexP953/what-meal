@@ -16,7 +16,7 @@ it("prepares empty collections and preserves data and extra indexes on repetitio
   expect(await Meal.countDocuments()).toBe(0);
   const connection = await dbConnect();
   const collections = (await connection.connection.listCollections()).map((item) => item.name).sort();
-  expect(collections).toEqual(["meals", "users"]);
+  expect(collections).toEqual(["access_limits", "meals", "users"]);
   const owner = await User.create({ email: "isolated@example.com", passwordHash: "test-only-hash" });
   const meal = await Meal.create({ userId: owner._id, name: "Soup", date: "2026-01-01", type: "dinner", reaction: "neutral" });
   await Meal.collection.createIndex({ notes: 1 }, { name: "consumer_notes" });

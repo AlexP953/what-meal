@@ -22,7 +22,7 @@ describe("framework consumers", () => {
 
   it("preserves the existing JWT identity and role", async () => {
     const callback = authConfig.callbacks.jwt;
-    const result = await callback({ token: {}, user: { id: "account", role: "admin" } } as Parameters<typeof callback>[0]);
-    expect(result).toEqual({ uid: "account", role: "admin" });
+    const result = await callback({ token: {}, user: { id: "account", role: "admin", authVersion: 0 } } as Parameters<typeof callback>[0]);
+    expect(result).toEqual({ uid: "account", role: "admin", authVersion: 0, signedInAt: expect.any(Number) });
   });
 });
