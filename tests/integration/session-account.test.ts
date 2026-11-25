@@ -1,0 +1,22 @@
+import { beforeAll, afterAll, expect, it } from "vitest";
+import { isolatedDatabase } from "../helpers/database";
+import { prepareDatabase } from "@/server/persistence/prepare";
+import { User, serializeUser } from "@/server/persistence/user";
+import { verifySessionAccount } from "@/server/session-account";
+const database = isolatedDatabase();
+beforeAll(async () => { database.configure(); await prepareDatabase(); });
+afterAll(() => database.cleanup());
+it("supports existing accounts, current roles and private revocation versions", async () => {
+  const user = await User.create({ email: "version@example.com", passwordHash: "hash" });
+  expect((await User.findById(user.id).select("+authVersion"))!.authVersion).toBe(0);
+  await User.collection.updateOne({ _id: user._id }, { $unset: { authVersion: "" } });
+  expect(await verifySessionAccount(user.id, 0)).toMatchObject({ status: "valid", user: { id: user.id, role: "user" } });
+  await User.updateOne({ _id: user._id }, { $set: { role: "admin" }, $inc: { authVersion: 1 } });
+  expect(await verifySessionAccount(user.id, 0)).toEqual({ status: "invalid" });
+  expect(await verifySessionAccount(user.id, 1)).toMatchObject({ status: "valid", user: { role: "admin" } });
+  expect(JSON.stringify(serializeUser(user))).not.toContain("authVersion");
+  expect(JSON.stringify(user)).not.toContain("authVersion");
+  expect((await User.findById(user.id).lean())!.authVersion).toBeUndefined();
+  await User.deleteOne({ _id: user._id });
+  expect(await verifySessionAccount(user.id, 1)).toEqual({ status: "invalid" });
+});

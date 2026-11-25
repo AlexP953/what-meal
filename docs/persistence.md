@@ -58,6 +58,7 @@ Los componentes cliente importan `PublicUser` y `UserRole` desde `@/shared/user`
 | `_id` | ObjectId generado por MongoDB |
 | `email` | Cadena obligatoria, sin espacios exteriores y en minúsculas |
 | `passwordHash` | Cadena obligatoria, excluida de consultas por defecto |
+| `authVersion` | Número privado, predeterminado cero, excluido de consultas por defecto |
 | `name` | Cadena opcional |
 | `role` | Obligatorio, `admin` o `user`, predeterminado `user` |
 | `fcmToken` | Cadena o null, predeterminado null, excluida por defecto |
@@ -69,6 +70,10 @@ convierte `_id` y su alias `id` a cadenas y las fechas a ISO 8601. Funciona con
 documentos y consultas lean. No incluye hashes ni tokens aunque estén cargados.
 La transformación `toJSON` aplica esa protección y conserva comidas pobladas.
 La autenticación solicita explícitamente `+passwordHash`.
+El verificador de sesiones solicita `+authVersion`. Los documentos anteriores sin
+ese campo equivalen a versión cero. El campo nunca pertenece a `PublicUser` ni
+a respuestas públicas. `verifySessionAccount` devuelve `valid`, `invalid` o
+`unavailable`, consulta el rol vigente y nunca concede acceso si falla MongoDB.
 Los consumidores de notificaciones deben solicitar `+fcmToken`.
 El rol no admite null ni eliminación mediante `$unset`.
 Las actualizaciones mediante consultas requieren `{runValidators: true}` para
