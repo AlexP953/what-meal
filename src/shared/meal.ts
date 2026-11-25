@@ -17,6 +17,12 @@ export interface PublicMeal {
   updatedAt: string;
 }
 
+export type ListedMeal = Omit<PublicMeal, "_id" | "userId" | "place" | "notes"> & {
+  user: string;
+  place: string | null;
+  notes: string | null;
+};
+
 // Gregorian calendar arithmetic avoids Date's timezone and year-0-to-99 conversions.
 export function isCivilDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;

@@ -4,6 +4,9 @@ import { Meal, serializeMeal } from "@/server/persistence/meal";
 import { addMealSchema } from "@/lib/validations";
 import { requireSession, isAdmin } from "@/lib/authz";
 import { Types } from "mongoose";
+import { apiError, dataError, readJson } from "@/server/http-errors";
+import { checkMutationOrigin } from "@/server/request-origin";
+import type { ListedMeal } from "@/shared/meal";
 
 function isError<T>(
   x: T | { error: NextResponse }
@@ -48,34 +51,24 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const res = await requireSession();
-  if (isError(res)) return res.error;
-  const { session } = res;
+  try {
+    const { session, error } = await requireSession();
+    if (error) return error;
+    const originError = checkMutationOrigin(req);
+    if (originError) return originError;
 
-  const json = await req.json();
-  const parsed = addMealSchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { errors: parsed.error.flatten() },
-      { status: 400 }
+    const parsed = addMealSchema.safeParse(await readJson(req));
+    if (!parsed.success) return apiError(400, "INVALID_INPUT", "Datos no válidos");
+
+    await dbConnect();
+    const { _id, userId, place, notes, ...meal } = serializeMeal(
+      await Meal.create({ ...parsed.data, userId: session.user!.id })
     );
+    const result: ListedMeal = {
+      ...meal, id: _id, user: userId, place: place ?? null, notes: notes ?? null,
+    };
+    return NextResponse.json(result, { status: 201 });
+  } catch (error) {
+    return dataError(error);
   }
-
-  await dbConnect();
-  const doc = serializeMeal(await Meal.create({ ...parsed.data, userId: session.user!.id }));
-  return NextResponse.json(
-    {
-      id: doc._id.toString(),
-      name: doc.name,
-      date: doc.date,
-      type: doc.type,
-      reaction: doc.reaction,
-      place: doc.place ?? null,
-      notes: doc.notes ?? null,
-      user: session.user!.id,
-      createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt,
-    },
-    { status: 201 }
-  );
 }

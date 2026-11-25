@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MealLean } from "../types";
 
-import type { MealReaction as Reaction, MealType } from "@/shared/meal";
+import type { ListedMeal, MealReaction as Reaction, MealType } from "@/shared/meal";
 
 export default function AddMealModal({
   open,
@@ -62,7 +62,6 @@ export default function AddMealModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId, 
           name,
           date,
           type,
@@ -72,40 +71,25 @@ export default function AddMealModal({
         }),
       });
 
-      const raw = await res.text(); 
-      let json: { error?: string; message?: string; meal?: Partial<MealLean> } | null = null;
-      try {
-        json = raw ? JSON.parse(raw) : null;
-      } catch {
-        if (!res.ok) throw new Error(raw || `HTTP ${res.status}`);
-      }
-
-      if (!res.ok) {
-        const msg = json?.error || json?.message || `HTTP ${res.status}`;
-        throw new Error(msg);
-      }
-
-      const m = json?.meal ?? {};
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "No se pudo crear la comida");
+      const meal = json as ListedMeal | null;
+      if (!meal?.id || !meal.user) throw new Error("La respuesta del alta está incompleta");
       const created: MealLean = {
-        _id: String(m._id),
-        userId: String(m.userId ?? userId),
-        name: String(m.name ?? name),
-        date: String(m.date ?? date),
-        type: (m.type ?? type) as MealLean["type"],
-        reaction: (m.reaction ?? reaction) as MealLean["reaction"],
-        place: m.place ?? place,
-        notes: m.notes ?? notes,
+        _id: meal.id,
+        userId: meal.user,
+        name: meal.name,
+        date: meal.date,
+        type: meal.type,
+        reaction: meal.reaction,
+        place: meal.place ?? undefined,
+        notes: meal.notes ?? undefined,
       };
-
-      if (!created._id || !created.userId || !created.reaction) {
-        throw new Error("Objeto creado incompleto");
-      }
 
       onCreated(created); 
       onClose(); 
     } catch (err) {
       setError((err instanceof Error ? err.message : "") || "No se pudo crear el meal");
-      console.error("Create meal error:", err);
     } finally {
       setSubmitting(false);
     }
