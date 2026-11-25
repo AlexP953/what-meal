@@ -1,4 +1,4 @@
-import { beforeAll, afterAll, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import bcrypt from "bcryptjs";
 vi.mock("@/lib/authz", () => ({ requireSession: vi.fn(), isAdmin: vi.fn(), forbid: vi.fn() }));
 import { POST } from "@/app/api/users/route";
@@ -6,9 +6,9 @@ import { isolatedDatabase } from "../helpers/database";
 import { prepareDatabase } from "@/server/persistence/prepare";
 import { User } from "@/server/persistence/user";
 import { Meal } from "@/server/persistence/meal";
-const database = isolatedDatabase();
-beforeAll(async () => { database.configure(); await prepareDatabase(); });
-afterAll(() => database.cleanup());
+let database: ReturnType<typeof isolatedDatabase>;
+beforeEach(async () => { database = isolatedDatabase(); database.configure(); await prepareDatabase(); });
+afterEach(() => database.cleanup());
 const request = (body: unknown) => new Request("http://localhost/api/users", { method: "POST", body: JSON.stringify(body) });
 
 it("creates only one normal first account under concurrent normalized duplicates", async () => {
@@ -28,7 +28,7 @@ it("creates only one normal first account under concurrent normalized duplicates
 it("returns safe stable errors for malformed JSON, input and quota", async () => {
   const foreign = await POST(new Request("http://localhost/api/users", { method: "POST", headers: { origin: "http://foreign.example" }, body: JSON.stringify({ email: "foreign@example.com", password: "123456789012" }) }));
   expect(foreign.status).toBe(403);
-  expect(await User.countDocuments()).toBe(1);
+  expect(await User.countDocuments()).toBe(0);
   const invalid = await POST(request({ email: "other@example.com", password: "123456789012", role: "admin" }));
   expect(invalid.status).toBe(400);
   expect(await invalid.json()).toMatchObject({ error: expect.any(String), code: "INVALID_INPUT" });

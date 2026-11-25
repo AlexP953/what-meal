@@ -1,9 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { authConfig } from "@/lib/auth.config";
-const fixture = vi.hoisted(() => ({ user: null as Record<string, unknown> | null }));
+const fixture = vi.hoisted(() => ({
+  user: null as Record<string, unknown> | null,
+  compare: vi.fn<(password: string, hash: string) => Promise<boolean>>(async password => password === "old"),
+}));
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn() }));
 vi.mock("@/server/persistence/user", () => ({ User: { findOne: () => ({ select: () => ({ lean: async () => fixture.user }) }) } }));
-vi.mock("bcryptjs", () => ({ default: { compare: async (password: string) => password === "old" } }));
+vi.mock("bcryptjs", () => ({ default: { compare: fixture.compare } }));
 import { authorizeCredentials } from "@/server/credentials";
 afterEach(() => vi.useRealTimers());
 
@@ -22,6 +25,7 @@ it("accepts old passwords, validates types and never distinguishes wrong credent
   expect(await authorizeCredentials({ email: "a@example.com", password: "wrong" })).toBeNull();
   fixture.user = null;
   expect(await authorizeCredentials({ email: "a@example.com", password: "old" })).toBeNull();
+  expect(fixture.compare).toHaveBeenLastCalledWith("old", expect.stringMatching(/^\$2b\$12\$/));
 });
 
 it("keeps the original login time, ignores updates, and rejects old or expired JWTs", async () => {

@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { signIn } from "next-auth/react";
+import { useHydrated } from "../use-hydrated";
 
 export default function LoginForm({ registered = false }: { registered?: boolean }) {
   const router = useRouter();
+  const hydrated = useHydrated();
   const submitting = useRef(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -57,10 +59,10 @@ export default function LoginForm({ registered = false }: { registered?: boolean
         </h1>
         {registered && <p role="status" className="mt-4 text-sm text-green-800">Cuenta creada. Inicia sesión para continuar.</p>}
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-4" aria-busy={loading} aria-describedby={error ? "login-error" : undefined}>
+        <form method="post" onSubmit={handleSubmit} className="mt-8 space-y-4" aria-busy={loading} aria-describedby={error ? "login-error" : undefined}>
           <div className="relative">
-            <label htmlFor="email" className="sr-only">
-              Email
+            <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-900">
+              Correo electrónico
             </label>
             <div className="flex items-center gap-3 rounded-xl border bg-white px-3 py-3 focus-within:ring-2 focus-within:ring-green-500">
               <svg
@@ -91,7 +93,7 @@ export default function LoginForm({ registered = false }: { registered?: boolean
           </div>
 
           <div className="relative">
-            <label htmlFor="password" className="sr-only">
+            <label htmlFor="password" className="mb-1 block text-sm font-medium text-gray-900">
               Contraseña
             </label>
             <div className="flex items-center gap-3 rounded-xl border bg-white px-3 py-3 focus-within:ring-2 focus-within:ring-green-500">
@@ -121,22 +123,13 @@ export default function LoginForm({ registered = false }: { registered?: boolean
               />
             </div>
 
-            {/* Forgot password
-            <div className="mt-2 text-right">
-              <a
-                href="#"
-                className="text-sm font-medium text-gray-500 hover:text-gray-700 hover:underline"
-              >
-                Forgot Password?
-              </a>
-            </div> */}
           </div>
 
           {error && <p id="login-error" role="alert" className="text-sm text-red-700">{error}</p>}
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={!hydrated || loading}
             className="mt-2 w-full h-11 rounded-xl bg-green-700 text-white font-semibold hover:bg-green-800 active:bg-green-800 transition focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
           >
             {loading ? "Cargando..." : "Iniciar sesión"}

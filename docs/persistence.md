@@ -83,8 +83,6 @@ El registro y las mutaciones autenticadas de cuentas y tokens rechazan un `Origi
 sin utilizar cabeceras reenviadas. Configura `AUTH_URL` para HTTPS y proxies.
 Sin esa variable, el origen usa HTTP y el `Host` directo, porque Next.js deriva
 el protocolo de su URL interna mediante cabeceras reenviadas.
-Las funciones Auth.js de servidor sin una solicitud exigen `AUTH_URL` antes de
-construir destinos, incluidos los accesos sin proveedor explícito.
 Fetch Metadata rechaza contextos ajenos.
 Los clientes locales sin `Origin` ni Fetch Metadata conservan acceso mediante
 su sesión válida. Las rutas de notificaciones deshabilitadas devuelven 503 antes
@@ -101,6 +99,11 @@ como prueba de autorización. `user.id` es una cadena estable y `user.role` refl
 el rol vigente. Las sesiones públicas no incluyen versiones ni fechas privadas.
 La fecha original del JWT limita el acceso a 24 horas, aunque Auth.js renueve la
 cookie. Los JWT anteriores sin versión y fecha original requieren otro acceso.
+Si MongoDB impide verificar la cuenta, GET y POST de `/api/auth/session`
+devuelven 503 `PERSISTENCE_UNAVAILABLE` sin datos de sesión y conservan la
+cookie original. Una consulta posterior puede recuperar la sesión si la cookie
+sigue vigente. El diario descarta el estado de la cuenta anterior al cambiar
+de cuenta o perder la sesión.
 
 ## Validación del modelo User
 

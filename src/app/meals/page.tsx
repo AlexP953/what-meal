@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { MealLean } from "../types";
 import { useSession, signOut } from "next-auth/react";
 import AddMealModal from "./AddMealModal";
@@ -19,6 +20,15 @@ const typeLabels: Record<MealLean["type"], string> = {
 
 export default function MealsPage() {
   const { data: session, status } = useSession();
+  if (status === "loading") return <p className="p-6" role="status">Cargando...</p>;
+  const userId = session?.user?.id;
+  if (status !== "authenticated" || !userId) {
+    return <p className="p-6"><Link href="/login" className="underline">Iniciar sesión</Link></p>;
+  }
+  return <AccountMeals key={userId} userId={userId} />;
+}
+
+function AccountMeals({ userId }: { userId: string }) {
   const [meals, setMeals] = useState<MealLean[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -62,32 +72,28 @@ export default function MealsPage() {
     return `${d}-${m}-${y}`;
   }
 
-  const userId = session?.user?.id;
-  const isLoading = status === "loading" || (status === "authenticated" && loading);
-
   useEffect(() => {
-    if (status === "loading") return;
-    if (status !== "authenticated" || !userId) {
-      return;
-    }
+    const controller = new AbortController();
+    const { signal } = controller;
 
     async function fetchMeals() {
       try {
-        const res = await fetch(`/api/users/${userId}`);
+        const res = await fetch(`/api/users/${userId}`, { signal });
         if (!res.ok) throw new Error("Error en la petición");
 
         const data = await res.json();
         const rawMeals = Array.isArray(data.user?.meals) ? data.user.meals : [];
-        setMeals(rawMeals.filter(Boolean));
+        if (!signal.aborted) setMeals(rawMeals.filter(Boolean));
       } catch {
-        setError("No se pudieron cargar las comidas");
+        if (!signal.aborted) setError("No se pudieron cargar las comidas");
       } finally {
-        setLoading(false);
+        if (!signal.aborted) setLoading(false);
       }
     }
 
     fetchMeals();
-  }, [userId, status]);
+    return () => controller.abort();
+  }, [userId]);
 
   function handleCreated(newMeal: MealLean | undefined) {
     if (!newMeal || !newMeal._id || !newMeal.reaction) return;
@@ -175,46 +181,44 @@ export default function MealsPage() {
             Filtros
           </button>
 
-          {status === "authenticated" && (
-            <div className="relative z-30" ref={menuRef}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenuOpen((v) => !v);
-                }}
-                className="p-2 rounded-lg hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-green-700"
-                aria-label="Menú"
-                aria-expanded={menuOpen}
+          <div className="relative z-30" ref={menuRef}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen((v) => !v);
+              }}
+              className="p-2 rounded-lg hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-green-700"
+              aria-label="Menú"
+              aria-expanded={menuOpen}
+            >
+              <Bars3Icon className="h-6 w-6 text-gray-700" />
+            </button>
+
+            {menuOpen && (
+              <div
+                className="absolute right-0 mt-2 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-2"
+                onClick={(e) => e.stopPropagation()}
               >
-                <Bars3Icon className="h-6 w-6 text-gray-700" />
-              </button>
-
-              {menuOpen && (
-                <div
-                  className="absolute right-0 mt-2 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-2"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="px-4 pb-2 border-b border-gray-100">
-                    <EnableNotifications onDone={() => setMenuOpen(false)} />
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      signOut({ callbackUrl: "/login" });
-                    }}
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Cerrar sesión
-                  </button>
+                <div className="px-4 pb-2 border-b border-gray-100">
+                  <EnableNotifications onDone={() => setMenuOpen(false)} />
                 </div>
-              )}
-            </div>
-          )}
+
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    signOut({ callbackUrl: "/login" });
+                  }}
+                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  Cerrar sesión
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {isLoading && <p style={{ color: "#473f3f" }}>Cargando...</p>}
+      {loading && <p style={{ color: "#473f3f" }}>Cargando...</p>}
       {error && <p className="text-red-500">{error}</p>}
 
       <div className="space-y-3 mt-4">
@@ -262,29 +266,27 @@ export default function MealsPage() {
             </div>
           </button>
         ))}
-        {!isLoading && filteredMeals.length === 0 && (
+        {!loading && !error && filteredMeals.length === 0 && (
           <p className="text-gray-500">
             No hay resultados con los filtros actuales.
           </p>
         )}
       </div>
 
-      {status === "authenticated" && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2">
-          <button
-            onClick={() => setOpenCreate(true)}
-            className="px-6 py-3 rounded-full bg-green-600 text-white font-semibold shadow-lg hover:bg-green-700 active:bg-green-800 transition"
-          >
-            + Añadir comida
-          </button>
-        </div>
-      )}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2">
+        <button
+          onClick={() => setOpenCreate(true)}
+          className="px-6 py-3 rounded-full bg-green-600 text-white font-semibold shadow-lg hover:bg-green-700 active:bg-green-800 transition"
+        >
+          + Añadir comida
+        </button>
+      </div>
 
       <AddMealModal
         open={openCreate}
         onClose={() => setOpenCreate(false)}
         onCreated={handleCreated}
-        userId={session?.user?.id ?? ""}
+        userId={userId}
       />
 
       <EditMealModal

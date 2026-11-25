@@ -1,12 +1,12 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { beforeAll, afterAll, expect, it } from "vitest";
+import { beforeEach, afterEach, expect, it } from "vitest";
 import { isolatedDatabase } from "../helpers/database";
 import { prepareDatabase } from "@/server/persistence/prepare";
 import { User } from "@/server/persistence/user";
-const database = isolatedDatabase();
-beforeAll(async () => { database.configure(); await prepareDatabase(); });
-afterAll(() => database.cleanup());
+let database: ReturnType<typeof isolatedDatabase>;
+beforeEach(async () => { database = isolatedDatabase(); database.configure(); await prepareDatabase(); });
+afterEach(() => database.cleanup());
 async function run(email: string, overrides: Record<string, string> = {}) {
   try {
     const result = await promisify(execFile)("npm", ["run", "users:promote", "--", "--email", email], { env: { ...process.env, ...overrides }, timeout: 12000 });
@@ -30,14 +30,16 @@ it("promotes and repeats without modifying anything except the selected role", a
   expect(await User.countDocuments()).toBe(1);
 });
 it("reports invalid, missing and unreachable accounts without exposing configuration or creating users", async () => {
+  const user = await User.create({ email: "unreachable@example.com", passwordHash: "private-test-hash" });
   for (const email of ["invalid", "missing@example.com"]) {
     const result = await run(email);
     expect(result.code).not.toBe(0);
     expect(result.stderr).toMatch(/correo|existe/);
   }
-  const failed = await run("promote@example.com", { MONGODB_URI: "mongodb://private-config-marker:private-value@127.0.0.1:1" });
+  const failed = await run(user.email, { MONGODB_URI: "mongodb://private-config-marker:private-value@127.0.0.1:1" });
   expect(failed.code).not.toBe(0);
   expect(failed.stderr).toContain("MongoDB");
   expect(failed.stdout + failed.stderr).not.toMatch(/private-config-marker|private-value|private-test-hash|private-test-token/);
   expect(await User.countDocuments()).toBe(1);
+  expect((await User.findById(user.id))?.role).toBe("user");
 });

@@ -47,8 +47,8 @@ aplicación. `npm start` la reinicia sin eliminar documentos. Reinicia MongoDB c
 contenedores y conserva el volumen. Consulta MongoDB local antes de eliminar datos.
 
 Las pruebas verifican CRUD, índices, serialización y recuperación de conexión.
-Cada archivo de integración utiliza una base generada `whatmeal_test_*` y elimina
-solo esa base. `TEST_MONGODB_URI` permite usar otro servidor local para las pruebas.
+Las pruebas de integración utilizan bases generadas `whatmeal_test_*` y solo
+eliminan las bases que crean. `TEST_MONGODB_URI` permite usar otro servidor local.
 No configures esa variable con servicios anteriores o bases de producción.
 
 ## Entorno
@@ -138,10 +138,11 @@ Admite servidores múltiples, credenciales codificadas y direcciones SRV.
 Los errores de sintaxis identifican `MONGODB_URI` sin mostrar su contenido.
 El nombre admite letras ASCII, cifras, guiones y guiones bajos, hasta 63 caracteres.
 La autenticación exige un secreto de al menos 32 caracteres.
-Configura `AUTH_URL` con el origen real de la aplicación, especialmente con HTTPS
-o un proxy. Los destinos de redirección permanecen en ese origen. Las funciones
-Auth.js de servidor sin una solicitud exigen esta variable. Sin ella, las rutas
-HTTP usan el `Host` directo y nunca confían en cabeceras reenviadas.
+En producción, configura `AUTH_URL` con el origen público de la aplicación,
+por ejemplo `https://comidas.example.com`. Auth.js usa ese origen para confiar
+en el host y la aplicación limita las redirecciones al mismo origen. En desarrollo
+local sin `AUTH_URL`, la aplicación usa HTTP y el `Host` directo para comprobar
+el origen, sin utilizar cabeceras reenviadas.
 Cada componente valida sus variables al consumirlas. La compilación no exige
 MongoDB ni credenciales Firebase. Los errores identifican la variable sin su valor.
 Las variables `NEXT_PUBLIC_*` son públicas y nunca contienen secretos.

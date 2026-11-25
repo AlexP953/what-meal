@@ -1,6 +1,14 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
+import { promisify } from "node:util";
+
+export async function buildTestApp() {
+  await promisify(execFile)(process.execPath, ["node_modules/next/dist/bin/next", "build"], {
+    env: { ...process.env, NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1" },
+    timeout: 120000,
+  });
+}
 
 export async function startTestApp(mode: "dev" | "start" = "dev", overrides: Record<string, string> = {}) {
   const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: mode === "dev" ? "development" : "production", AUTH_SECRET: randomBytes(32).toString("hex"), AUTH_TRUST_HOST: "true", NEXT_PUBLIC_NOTIFICATIONS_ENABLED: "false", NEXT_TELEMETRY_DISABLED: "1" };

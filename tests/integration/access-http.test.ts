@@ -6,7 +6,7 @@ import { isolatedDatabase } from "../helpers/database";
 import { prepareDatabase } from "@/server/persistence/prepare";
 import { User } from "@/server/persistence/user";
 import { Meal } from "@/server/persistence/meal";
-import { startTestApp, authClient } from "../helpers/app";
+import { startTestApp, authClient, buildTestApp } from "../helpers/app";
 
 describe.each(["dev", "start"] as const)("empty-install access over HTTP (%s)", mode => {
   const database = isolatedDatabase();
@@ -14,7 +14,7 @@ describe.each(["dev", "start"] as const)("empty-install access over HTTP (%s)", 
   beforeAll(async () => {
     database.configure();
     await prepareDatabase();
-    if (mode === "start") await promisify(execFile)(process.execPath, ["node_modules/next/dist/bin/next", "build"], { env: { ...process.env, NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1" }, timeout: 120000 });
+    if (mode === "start") await buildTestApp();
     app = await startTestApp(mode);
   }, 120000);
   afterAll(async () => { await app?.stop(); await database.cleanup(); });
