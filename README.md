@@ -58,6 +58,23 @@ Con nvm, ejecuta `nvm install` y `nvm use`. Comprueba `node --version` y
 `npm --version` antes de ejecutar `npm ci`. El archivo de bloqueo se versiona.
 No utilices `--force` ni `--legacy-peer-deps`.
 
+## Primer administrador y recuperación
+
+Crea primero una cuenta normal en `/register`. En el servidor autorizado,
+desde la carpeta del proyecto y con `.env.local` configurado, ejecuta:
+
+```bash
+npm run users:promote -- --email <correo>
+```
+
+El comando normaliza el correo, exige una cuenta existente y cambia únicamente
+su rol a `admin`. No crea cuentas ni contraseñas. Repetirlo es seguro y confirma
+la promoción sin mostrar credenciales. Utiliza `MONGODB_URI` y `MONGODB_DB`.
+La siguiente operación protegida utiliza el rol nuevo, sin exigir otro acceso.
+Si no queda ningún administrador, registra una cuenta normal y ejecuta el mismo
+comando para recuperar la administración. No existe una ruta HTTP de promoción
+local. Los administradores también conservan la gestión mediante las API.
+
 ## Comandos
 
 - `npm run dev`: desarrollo.
