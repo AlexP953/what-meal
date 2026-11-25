@@ -38,3 +38,20 @@ it("distinguishes a rejected form from a lost response", async () => {
   await expect(mutateMeal(operation, meal.user, signal)).resolves.toEqual({ status: "rejected", error: "Completa el nombre" });
   await expect(mutateMeal(operation, meal.user, signal)).resolves.toEqual({ status: "uncertain" });
 });
+
+it("validates edited meal identity and retains its original creation timestamp", async () => {
+  const { user, createdAt } = meal;
+  const fields = { id: meal.id, date: meal.date, type: meal.type, reaction: meal.reaction };
+  const edited = { ...fields, userId: user, name: "Tostada", place: null, notes: null };
+  const fetcher = vi.fn()
+    .mockResolvedValueOnce(Response.json({ meal: { ...edited, id: "another-meal" } }))
+    .mockResolvedValueOnce(Response.json({ meal: edited }));
+  vi.stubGlobal("fetch", fetcher);
+  const edit = { method: "PATCH", meal: { ...meal, type: "lunch", reaction: "good" }, fields: { ...operation.fields, place: "", notes: "" } } as const;
+  const { signal } = new AbortController();
+  await expect(mutateMeal(edit, user, signal)).resolves.toEqual({ status: "uncertain" });
+  await expect(mutateMeal(edit, user, signal)).resolves.toMatchObject({
+    status: "confirmed", change: { meal: { id: meal.id, name: "Tostada", user, createdAt } },
+  });
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({ place: "", notes: "" });
+});

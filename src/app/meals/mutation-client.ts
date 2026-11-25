@@ -10,7 +10,10 @@ type MealFields = {
   notes: string;
 };
 
-type MealOperation = { method: "POST"; fields: MealFields };
+type MealOperation =
+  | { method: "POST"; fields: MealFields }
+  | { method: "PATCH"; fields: MealFields; meal: DiaryMeal }
+  | { method: "DELETE"; meal: DiaryMeal };
 
 type MutationResult =
   | { status: "confirmed"; change: DiaryChange }
@@ -28,10 +31,12 @@ function isMealFields(value: Partial<MealFields>) {
 
 export async function mutateMeal(operation: MealOperation, userId: string, signal: AbortSignal): Promise<MutationResult> {
   try {
-    const response = await fetch("/api/meals", {
+    const path = operation.method === "POST" ? "/api/meals" : `/api/meals/${encodeURIComponent(operation.meal.id)}`;
+    const headers = { [EXPECTED_MEAL_ACCOUNT_HEADER]: userId };
+    const response = await fetch(path, {
       method: operation.method,
-      headers: { "Content-Type": "application/json", [EXPECTED_MEAL_ACCOUNT_HEADER]: userId },
-      body: JSON.stringify({
+      headers: operation.method === "DELETE" ? headers : { ...headers, "Content-Type": "application/json" },
+      body: operation.method === "DELETE" ? undefined : JSON.stringify(operation.method === "PATCH" ? operation.fields : {
         ...operation.fields,
         place: operation.fields.place || undefined,
         notes: operation.fields.notes || undefined,
@@ -48,6 +53,20 @@ export async function mutateMeal(operation: MealOperation, userId: string, signa
       status: "rejected",
       error: typeof body?.error === "string" ? body.error : "No se pudo guardar la comida. Comprueba los datos e inténtalo de nuevo.",
     };
+
+    if (operation.method === "DELETE") {
+      return response.ok ? { status: "confirmed", change: { id: operation.meal.id } } : { status: "uncertain" };
+    }
+    if (operation.method === "PATCH") {
+      const updated = body?.meal;
+      if (response.status !== 200 || !updated) return { status: "uncertain" };
+      if (typeof updated.userId === "string" && updated.userId !== userId) return { status: "session-lost" };
+      if (updated.userId !== userId || updated.id !== operation.meal.id || !isMealFields(updated)) {
+        return { status: "uncertain" };
+      }
+      const { userId: owner, ...fields } = updated;
+      return { status: "confirmed", change: { meal: { ...fields, user: owner, createdAt: operation.meal.createdAt } } };
+    }
 
     if (response.status !== 201 || !body) return { status: "uncertain" };
     if (typeof body.user === "string" && body.user !== userId) return { status: "session-lost" };

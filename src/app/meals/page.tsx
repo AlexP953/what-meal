@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import AddMealModal from "./AddMealModal";
-import EditMealModal from "./EditMealModal";
+import MealFormDialog from "./MealFormDialog";
 import DiaryFiltersDialog from "./DiaryFiltersDialog";
 import { reactionLabels, typeLabels } from "./labels";
 import {
@@ -147,7 +146,12 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
     setRequest(current => ({ filters: filters ?? current.filters }));
   }
 
-  function confirmChange(change: DiaryChange, message?: string) {
+  function closeMealForm() {
+    setOpenCreate(false);
+    setSelectedMeal(null);
+  }
+
+  function confirmChange(change: DiaryChange, message: string) {
     if (!(expiresAt > Date.now())) {
       expireSession();
       return;
@@ -155,7 +159,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
     setDiary(current => current && {
       ...current, meals: applyDiaryChange(current.meals, current.filters, change),
     });
-    if (message) setConfirmation({ message });
+    setConfirmation({ message });
     refresh();
   }
 
@@ -310,28 +314,17 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
         )}
       </div>
 
-      {openCreate && (
-        <AddMealModal
-          onClose={() => setOpenCreate(false)}
-          onCreated={change => confirmChange(change, "Comida añadida.")}
-          onCheckDiary={() => {
-            setOpenCreate(false);
-            refresh(defaultDiaryFilters);
-          }}
-          onSessionLost={expireSession}
-          userId={userId}
-        />
-      )}
-      {selectedMeal && (
-        <EditMealModal
-          onClose={() => setSelectedMeal(null)}
-          meal={selectedMeal}
+      {(openCreate || selectedMeal) && (
+        <MealFormDialog
+          meal={selectedMeal ?? undefined}
+          onClose={closeMealForm}
           fallbackFocus={createButton}
           userId={userId}
-          onUpdated={({ userId, ...meal }) => confirmChange({
-            meal: { ...meal, user: userId, createdAt: selectedMeal.createdAt },
-          })}
-          onDeleted={id => confirmChange({ id })}
+          onConfirmed={confirmChange}
+          onCheckDiary={() => {
+            closeMealForm();
+            refresh(defaultDiaryFilters);
+          }}
           onSessionLost={expireSession}
         />
       )}
