@@ -10,7 +10,7 @@ import {
   applyDiaryChange, dateRangeError, defaultDiaryFilters, formatMealDate, readDiary, watchDiaryExpiry,
   type DiaryChange, type DiaryFilters, type DiaryMeal, type DiarySnapshot,
 } from "./diary-client";
-import { FunnelIcon, XMarkIcon, Bars3Icon } from "@heroicons/react/24/outline";
+import { FunnelIcon, XMarkIcon, Bars3Icon, PlusIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { announceSessionChange, postAuth, watchSessionChange } from "../session-client";
 import AccessScreen from "../components/AccessScreen";
 import EnableNotifications from "../components/EnableNotifications";
@@ -47,9 +47,7 @@ function SessionLost() {
 }
 
 function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number }) {
-  const [diary, setDiary] = useState<DiarySnapshot | null>({
-    meals: [], filters: defaultDiaryFilters,
-  });
+  const [diary, setDiary] = useState<DiarySnapshot | null>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const signOutPending = useRef(false);
@@ -132,7 +130,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
           expireSession();
           return;
         }
-        setDiary(current => current && !signal.aborted ? result : current);
+        setDiary(current => current !== null && !signal.aborted ? result : current);
         setError("");
       } catch {
         if (signal.aborted) return;
@@ -140,7 +138,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
           expireSession();
           return;
         }
-        setError("No se pudo actualizar la lista de comidas.");
+        setError("No se pudieron consultar las comidas.");
       } finally {
         if (!signal.aborted) setLoading(false);
       }
@@ -152,6 +150,8 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
 
   function refresh(filters?: DiaryFilters) {
     pendingRequest.current?.abort();
+    setError("");
+    setLoading(true);
     setRequest(current => ({ filters: filters ?? current.filters }));
   }
 
@@ -181,25 +181,15 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
 
   if (sessionExpired) return <SessionLost />;
 
+  const filters = diary?.filters ?? defaultDiaryFilters;
+  const filtered = Boolean(filters.type || filters.reactions.length || filters.dateFrom || filters.dateTo);
+  const empty = diary?.meals.length === 0 && !filtered;
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6 flex flex-col relative pb-32">
-      <div className="mb-4 flex items-center justify-between relative z-10">
-        <h1 className="text-2xl font-bold text-gray-800">Tus comidas</h1>
-
-        <div className="flex items-center gap-3">
-          <button
-            onClick={event => {
-              event.currentTarget.focus();
-              setDraftFilters(request.filters);
-            }}
-            className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-gray-100 relative z-20"
-            style={{ color: "#473f3f" }}
-            title="Filtros"
-          >
-            <FunnelIcon className="h-5 w-5" />
-            Filtros
-          </button>
-
+    <main className="app-surface">
+      <div className="diary-shell">
+        <header className="diary-header">
+          <span className="diary-brand">What<span>Meal</span></span>
           <div className="relative z-30" ref={menuRef}>
             <button
               onClick={(e) => {
@@ -231,83 +221,83 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
               </div>
             )}
           </div>
-        </div>
-      </div>
+        </header>
 
-      {loading && <p style={{ color: "#473f3f" }}>Cargando...</p>}
-      {error && (
-        <div className="flex items-baseline gap-3 text-red-700">
-          <p role="alert">{error}</p>
-          <button type="button" onClick={() => refresh()} className="underline">Reintentar</button>
-        </div>
-      )}
-
-      <div className="space-y-3 mt-4">
-        {diary.meals.map((meal) => (
-          <button
-            key={meal.id}
-            onClick={event => {
+        <section className="diary-intro" aria-labelledby="diary-title">
+          <div className="min-w-0">
+            <h1 id="diary-title" className="app-title">Tus comidas</h1>
+            <p className="app-muted">
+              {empty ? "Empieza por añadir tu primera comida y anota cómo te sentó." : "Consulta y registra tus comidas."}
+            </p>
+          </div>
+          {diary && (
+            <button ref={createButton} className="app-button app-button-primary shrink-0" onClick={event => {
               event.currentTarget.focus();
-              setSelectedMeal(meal);
-            }}
-            className={`w-full text-left rounded-xl border bg-white px-4 py-3 shadow-sm transition hover:shadow ${
-              meal.reaction === "good"
-                ? "border-green-200 bg-green-50"
-                : meal.reaction === "bad"
-                ? "border-red-200 bg-red-50"
-                : "border-gray-200"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-gray-800">{meal.name}</p>
-                <p className="text-sm text-gray-500">
-                  {typeLabels[meal.type]} • {formatMealDate(meal.date)}
-                </p>
-                {meal.place && (
-                  <p className="text-sm text-gray-400">{meal.place}</p>
-                )}
-                {meal.notes && (
-                  <p className="text-sm text-gray-400 italic">“{meal.notes}”</p>
-                )}
-              </div>
+              setOpenCreate(true);
+            }}>
+              <PlusIcon aria-hidden="true" className="h-5 w-5" />
+              Añadir comida
+            </button>
+          )}
+        </section>
 
-              <span
-                className={`text-sm font-semibold ${
-                  meal.reaction === "good"
-                    ? "text-green-600"
-                    : meal.reaction === "bad"
-                    ? "text-red-600"
-                    : "text-gray-400"
-                }`}
-              >
-                {meal.reaction === "good"
-                  ? "✅ Bien"
-                  : meal.reaction === "bad"
-                  ? "❌ Mal"
-                  : "• Neutral"}
-              </span>
-            </div>
-          </button>
-        ))}
-        {!loading && !error && diary.meals.length === 0 && (
-          <p className="text-gray-500">
-            No hay resultados con los filtros actuales.
-          </p>
+        <p role="status" className={loading ? "app-feedback mt-4" : "sr-only"}>
+          {loading ? diary ? "Actualizando comidas…" : "Cargando comidas…" : ""}
+        </p>
+        {error && (
+          <div className="app-feedback app-error mt-4 flex flex-wrap items-center justify-between gap-x-4">
+            <p role="alert">{error}</p>
+            <button type="button" onClick={() => refresh()} className="app-link">Reintentar consulta</button>
+          </div>
         )}
-      </div>
 
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2">
-        <button
-          ref={createButton}
-          onClick={event => {
-            event.currentTarget.focus();
-            setOpenCreate(true);
-          }}
-          className="px-6 py-3 rounded-full bg-green-600 text-white font-semibold shadow-lg hover:bg-green-700 active:bg-green-800 transition"
-        >
-          + Añadir comida
-        </button>
+        {diary && (
+          <div className="diary-toolbar">
+            <button
+              type="button"
+              onClick={event => {
+                event.currentTarget.focus();
+                setDraftFilters(filters);
+              }}
+              className="app-button"
+            >
+              <FunnelIcon aria-hidden="true" className="h-5 w-5" />
+              Filtros
+            </button>
+          </div>
+        )}
+
+        {diary?.meals.length ? (
+          <ul className="diary-list" aria-label="Comidas">
+            {diary.meals.map(meal => (
+              <li key={meal.id}>
+                <button
+                  type="button"
+                  className="diary-row"
+                  onClick={event => {
+                    event.currentTarget.focus();
+                    setSelectedMeal(meal);
+                  }}
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold">{meal.name}</p>
+                    <p className="app-muted text-sm">
+                      {typeLabels[meal.type]} · <time dateTime={meal.date}>{formatMealDate(meal.date)}</time>
+                    </p>
+                    {meal.place && <p className="app-muted mt-1 text-sm">{meal.place}</p>}
+                    {meal.notes && <p className="app-muted mt-1 text-sm italic">{meal.notes}</p>}
+                  </div>
+                  <span className="diary-reaction" data-reaction={meal.reaction}>
+                    {meal.reaction === "good" ? "Bien" : meal.reaction === "bad" ? "Mal" : "Neutral"}
+                  </span>
+                  <ChevronRightIcon aria-hidden="true" className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : filtered && !loading && !error && (
+          <p className="app-muted mt-4">No hay resultados con los filtros actuales.</p>
+        )}
       </div>
 
       {openCreate && (
@@ -483,6 +473,6 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
           </div>
         </DiaryDialog>
       )}
-    </div>
+    </main>
   );
 }
