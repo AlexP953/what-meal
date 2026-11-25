@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { applyDiaryChange, dateRangeError, defaultDiaryFilters, diarySearch, formatMealDate, readDiary, watchDiaryExpiry } from "@/app/meals/diary-client";
+import { applyDiaryChange, dateRangeError, defaultDiaryFilters, diarySearch, formatMealDate, hasDiaryFilters, readDiary, watchDiaryExpiry } from "@/app/meals/diary-client";
 import type { ListedMeal } from "@/shared/meal";
 
 const row: ListedMeal = {
@@ -139,4 +139,10 @@ it("checks expiry on return from suspension and removes the previous session wat
   } finally {
     stop();
   }
+});
+
+it("treats sort order alone as an unrestricted diary", () => {
+  expect(hasDiaryFilters({ ...defaultDiaryFilters, sortDir: "asc" })).toBe(false);
+  expect(hasDiaryFilters({ ...defaultDiaryFilters, dateTo: "2024-02-29" })).toBe(true);
+  expect(hasDiaryFilters({ ...defaultDiaryFilters, reactions: ["bad"] })).toBe(true);
 });

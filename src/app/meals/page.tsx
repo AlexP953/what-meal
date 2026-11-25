@@ -5,24 +5,16 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import AddMealModal from "./AddMealModal";
 import EditMealModal from "./EditMealModal";
-import DiaryDialog from "./DiaryDialog";
+import DiaryFiltersDialog from "./DiaryFiltersDialog";
+import { reactionLabels, typeLabels } from "./labels";
 import {
-  applyDiaryChange, dateRangeError, defaultDiaryFilters, formatMealDate, readDiary, watchDiaryExpiry,
+  applyDiaryChange, defaultDiaryFilters, formatMealDate, hasDiaryFilters, readDiary, watchDiaryExpiry,
   type DiaryChange, type DiaryFilters, type DiaryMeal, type DiarySnapshot,
 } from "./diary-client";
-import { FunnelIcon, XMarkIcon, Bars3Icon, PlusIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
+import { FunnelIcon, Bars3Icon, PlusIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { announceSessionChange, postAuth, watchSessionChange } from "../session-client";
 import AccessScreen from "../components/AccessScreen";
 import EnableNotifications from "../components/EnableNotifications";
-
-import type { MealReaction as Reaction, MealType } from "@/shared/meal";
-
-const typeLabels: Record<MealType, string> = {
-  breakfast: "Desayuno",
-  lunch: "Comida",
-  dinner: "Cena",
-  snack: "Snack",
-};
 
 export default function MealsPage() {
   const { data: session, status } = useSession();
@@ -60,8 +52,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
   const [openCreate, setOpenCreate] = useState(false);
 
   const [selectedMeal, setSelectedMeal] = useState<DiaryMeal | null>(null);
-  const [draftFilters, setDraftFilters] = useState<DiaryFilters | null>(null);
-  const rangeError = draftFilters ? dateRangeError(draftFilters.dateFrom, draftFilters.dateTo) : "";
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -89,7 +80,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
     setDiary(null);
     setOpenCreate(false);
     setSelectedMeal(null);
-    setDraftFilters(null);
+    setFiltersOpen(false);
   }, []);
 
   useEffect(() => watchSessionChange(expireSession), [expireSession]);
@@ -182,7 +173,13 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
   if (sessionExpired) return <SessionLost />;
 
   const filters = diary?.filters ?? defaultDiaryFilters;
-  const filtered = Boolean(filters.type || filters.reactions.length || filters.dateFrom || filters.dateTo);
+  const filtered = hasDiaryFilters(filters);
+  const filterSummary = [
+    filters.type && typeLabels[filters.type],
+    filters.reactions.map(reaction => reactionLabels[reaction]).join(" / "),
+    filters.dateFrom && `Desde ${formatMealDate(filters.dateFrom)}`,
+    filters.dateTo && `Hasta ${formatMealDate(filters.dateTo)}`,
+  ].filter(Boolean).join(" · ");
   const empty = diary?.meals.length === 0 && !filtered;
 
   return (
@@ -257,13 +254,17 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
               type="button"
               onClick={event => {
                 event.currentTarget.focus();
-                setDraftFilters(filters);
+                setFiltersOpen(true);
               }}
               className="app-button"
             >
               <FunnelIcon aria-hidden="true" className="h-5 w-5" />
               Filtros
             </button>
+            <div className="app-muted text-sm">
+              <p>{filters.sortDir === "asc" ? "Más antiguas primero" : "Más nuevas primero"}</p>
+              {filtered && <p>Filtros aplicados · {filterSummary}</p>}
+            </div>
           </div>
         )}
 
@@ -288,7 +289,7 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
                     {meal.notes && <p className="app-muted mt-1 text-sm italic">{meal.notes}</p>}
                   </div>
                   <span className="diary-reaction" data-reaction={meal.reaction}>
-                    {meal.reaction === "good" ? "Bien" : meal.reaction === "bad" ? "Mal" : "Neutral"}
+                    {reactionLabels[meal.reaction]}
                   </span>
                   <ChevronRightIcon aria-hidden="true" className="h-4 w-4" />
                 </button>
@@ -296,7 +297,10 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
             ))}
           </ul>
         ) : filtered && !loading && !error && (
-          <p className="app-muted mt-4">No hay resultados con los filtros actuales.</p>
+          <div className="diary-no-matches">
+            <p>No hay comidas que coincidan con estos filtros.</p>
+            <button type="button" className="app-link" onClick={() => refresh(defaultDiaryFilters)}>Limpiar filtros</button>
+          </div>
         )}
       </div>
 
@@ -321,157 +325,11 @@ function AccountMeals({ userId, expiresAt }: { userId: string; expiresAt: number
           onSessionLost={expireSession}
         />
       )}
-      {draftFilters && (
-        <DiaryDialog titleId="diary-filter-title" onClose={() => setDraftFilters(null)}>
-          <div className="flex items-center justify-between mb-3">
-            <h2 id="diary-filter-title" className="text-lg font-semibold text-gray-900">Filtros</h2>
-            <button
-              onClick={() => setDraftFilters(null)}
-              className="h-8 w-8 grid place-items-center rounded-full hover:bg-gray-100"
-              aria-label="Cerrar"
-            >
-              <XMarkIcon className="h-5 w-5" />
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <p id="diary-filter-reaction" className="text-sm font-medium text-gray-700 mb-2">
-                Reacción
-              </p>
-              <div role="group" aria-labelledby="diary-filter-reaction" className="flex flex-wrap gap-2">
-                {(["good", "neutral", "bad"] as Reaction[]).map((r) => {
-                  const active = draftFilters.reactions.includes(r);
-                  const label =
-                    r === "good" ? "Bien" : r === "bad" ? "Mal" : "Neutral";
-                  return (
-                    <button
-                      key={r}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => setDraftFilters({
-                        ...draftFilters,
-                        reactions: active ? draftFilters.reactions.filter(value => value !== r) : [...draftFilters.reactions, r],
-                      })}
-                      className={`px-3 py-1 rounded-full text-sm border transition ${
-                        active
-                          ? "bg-gray-900 text-white border-gray-900"
-                          : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="diary-filter-type" className="block text-sm font-medium text-gray-700 mb-2">
-                Tipo
-              </label>
-              <select
-                id="diary-filter-type"
-                value={draftFilters.type}
-                onChange={(e) => setDraftFilters({ ...draftFilters, type: e.target.value as MealType | "" })}
-                className="w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
-              >
-                <option value="">Todos</option>
-                <option value="breakfast">Desayuno</option>
-                <option value="lunch">Comida</option>
-                <option value="dinner">Cena</option>
-                <option value="snack">Snack</option>
-              </select>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="diary-filter-desde" className="block text-sm font-medium text-gray-700">
-                  Desde
-                </label>
-                <input
-                  type="date"
-                  id="diary-filter-desde"
-                  value={draftFilters.dateFrom}
-                  aria-invalid={Boolean(rangeError)}
-                  aria-describedby={rangeError ? "diary-filter-date-error" : undefined}
-                  onChange={(e) => setDraftFilters({ ...draftFilters, dateFrom: e.target.value })}
-                  className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-              <div>
-                <label htmlFor="diary-filter-hasta" className="block text-sm font-medium text-gray-700">
-                  Hasta
-                </label>
-                <input
-                  type="date"
-                  id="diary-filter-hasta"
-                  value={draftFilters.dateTo}
-                  aria-invalid={Boolean(rangeError)}
-                  aria-describedby={rangeError ? "diary-filter-date-error" : undefined}
-                  onChange={(e) => setDraftFilters({ ...draftFilters, dateTo: e.target.value })}
-                  className="mt-1 w-full rounded-lg border px-3 py-2 text-base outline-none focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-            </div>
-
-            {rangeError && <p id="diary-filter-date-error" role="alert" className="text-sm text-red-700">{rangeError}</p>}
-
-            <div>
-              <p id="diary-filter-order" className="block text-sm font-medium text-gray-700 mb-2">
-                Orden por fecha
-              </p>
-              <div role="group" aria-labelledby="diary-filter-order" className="flex gap-2">
-                <button
-                  type="button"
-                  aria-pressed={draftFilters.sortDir === "desc"}
-                  onClick={() => setDraftFilters({ ...draftFilters, sortDir: "desc" })}
-                  className={`px-3 py-1 rounded-lg border text-sm ${
-                    draftFilters.sortDir === "desc"
-                      ? "bg-gray-900 text-white border-gray-900"
-                      : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  Más nuevas
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={draftFilters.sortDir === "asc"}
-                  onClick={() => setDraftFilters({ ...draftFilters, sortDir: "asc" })}
-                  className={`px-3 py-1 rounded-lg border text-sm ${
-                    draftFilters.sortDir === "asc"
-                      ? "bg-gray-900 text-white border-gray-900"
-                      : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  Más antiguas
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-5 flex items-center justify-between">
-            <button
-              onClick={() => {
-                setDraftFilters(defaultDiaryFilters);
-                refresh(defaultDiaryFilters);
-              }}
-              className="text-sm text-gray-600 underline decoration-dotted hover:text-gray-800"
-            >
-              Limpiar filtros
-            </button>
-            <button
-              disabled={Boolean(rangeError)}
-              onClick={() => {
-                refresh(draftFilters);
-                setDraftFilters(null);
-              }}
-              className="px-4 py-2 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 active:bg-green-800 disabled:opacity-60"
-            >
-              Aplicar
-            </button>
-          </div>
-        </DiaryDialog>
+      {filtersOpen && (
+        <DiaryFiltersDialog filters={filters} onClose={() => setFiltersOpen(false)} onApply={next => {
+          refresh(next);
+          setFiltersOpen(false);
+        }} />
       )}
     </main>
   );
