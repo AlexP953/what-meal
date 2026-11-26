@@ -86,14 +86,19 @@ mkdir -- "$WHATMEAL_SECRETS_DIR"
 for name in auth-secret mongo-root-password mongo-app-password mongo-backup-password; do
   openssl rand -hex 32 > "$WHATMEAL_SECRETS_DIR/$name"
 done
+# Local Compose bind-mounts secret files and preserves their host ownership.
+secret_source=${WHATMEAL_SECRETS_DIR//\"/\"\"}
+docker run --rm --network none --user 0 --entrypoint chown \
+  --mount "type=bind,\"source=$secret_source\",target=/secrets" "$image" \
+  1000:1000 /secrets/auth-secret /secrets/mongo-app-password
 
 owns_project=true
 compose up -d --wait mongo >&2
+compose run --rm --no-deps -T mongo-provision >&2
 if ! compose run --rm --no-deps -T mongo-restore < "$staged/database.archive.gz"; then
   echo 'MongoDB rejected the archive. The restoration did not complete.' >&2
   exit 1
 fi
-compose run --rm --no-deps -T mongo-provision >&2
 find "$staged" -depth -delete
 touch "$workspace/restore-complete"
 printf 'Restore complete in project %s.\n' "$project"

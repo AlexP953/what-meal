@@ -2,6 +2,7 @@
 // mongosh loads scripts as CommonJS.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { readFileSync } = require("node:fs");
+const localMongo = "mongodb://127.0.0.1:27017";
 
 function readPassword(name) {
   const value = readFileSync(`/run/secrets/${name}`, "utf8").replace(/\n+$/, "");
@@ -19,10 +20,21 @@ function ensureAccount(database, username, password, role) {
     throw new Error("Unexpected account roles");
   }
 
-  const account = new Mongo("mongodb://mongo:27017").getDB("whatmeal");
+  const account = new Mongo(localMongo).getDB("whatmeal");
   account.auth(username, password);
   if (account.runCommand({ listCollections: 1, nameOnly: true }).ok !== 1) {
     throw new Error("Account cannot list collections");
+  }
+}
+
+function ensureRoot(admin, password) {
+  try {
+    admin.auth("whatmeal_root", password);
+  } catch {
+    // MongoDB allows localhost to create the first account only on a server
+    // with no users or roles. An existing account never gets reset here.
+    admin.createUser({ user: "whatmeal_root", pwd: password, roles: ["root"] });
+    admin.auth("whatmeal_root", password);
   }
 }
 
@@ -32,8 +44,8 @@ try {
   const backupPassword = readPassword("mongo_backup_password");
   if (new Set([rootPassword, appPassword, backupPassword]).size !== 3) throw new Error("Passwords must differ");
 
-  const connection = new Mongo("mongodb://mongo:27017");
-  connection.getDB("admin").auth("whatmeal_root", rootPassword);
+  const connection = new Mongo(localMongo);
+  ensureRoot(connection.getDB("admin"), rootPassword);
   const database = connection.getDB("whatmeal");
   ensureAccount(database, "whatmeal_app", appPassword, "readWrite");
   ensureAccount(database, "whatmeal_backup", backupPassword, "read");

@@ -361,11 +361,15 @@ antes de retirar copias antiguas.
 
 ### Ensayo de restauración
 
-Usa una copia con datos ficticios, la revisión del despliegue que la creó y un
-directorio privado y cifrado con espacio para el archivo y el volumen restaurado.
+Usa una copia con datos ficticios y la revisión del despliegue que la creó.
+Usa un directorio privado en almacenamiento cifrado para la copia temporal
+y los secretos. Configura el almacenamiento de Docker sobre un disco cifrado
+con espacio para el volumen de MongoDB.
 Elige una ruta nueva fuera de la copia. El comando verifica las sumas y la
 versión exacta de MongoDB. Crea un proyecto Compose con una red, un volumen y
-secretos propios. Solo restaura la base `whatmeal` y conserva sus índices.
+secretos propios. Requiere Docker Engine en modo rootful, sin reasignación de
+UID. Los dos secretos de la aplicación quedan con modo `0600` y UID `1000`.
+El comando restaura la base `whatmeal` y conserva sus índices.
 
 ```bash
 workspace="$HOME/ensayo-restauracion"

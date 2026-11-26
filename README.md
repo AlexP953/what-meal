@@ -197,7 +197,7 @@ Solo se excluyen archivos generados. No se admiten advertencias de lint.
 
 En un servidor Linux con Docker Engine y Compose 2.24 o posterior, usa un
 almacenamiento persistente para los volúmenes de Docker. La referencia fija
-Node.js 24.22.3, MongoDB 8.0.38 y Caddy 2.11.4 por digest. Usa una máquina
+Node.js 24.22.3, MongoDB 8.0.38 y Caddy 2.11.9 por digest. Usa una máquina
 compatible con MongoDB 8.0 y con espacio para compilar la aplicación y conservar
 los datos y certificados. Comprueba `docker info` y `docker compose version`.
 
@@ -242,6 +242,10 @@ requiere cambiar también la cuenta correspondiente en la base. La compilación
 y la ejecución mantienen desactivadas las notificaciones y prescinden de
 Firebase. Compose verifica la cuenta de aplicación y prepara la base antes de
 iniciar Next.js y Caddy.
+
+Si se interrumpe el primer arranque, repite `up -d --wait` con el mismo
+proyecto y los mismos secretos. La tarea de MongoDB crea la primera cuenta
+desde la conexión local o verifica la cuenta existente.
 
 En el primer arranque, sigue los registros de Caddy hasta que obtenga el
 certificado. Verifica HTTP, la cadena de confianza, el nombre y la caducidad
