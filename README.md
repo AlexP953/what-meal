@@ -292,6 +292,39 @@ cuando termines y registra solo el resultado de las comprobaciones.
 
 Para programar y verificar copias, consulta [el procedimiento de copia](docs/persistence.md#copias-del-despliegue).
 
+### Diagnóstico del despliegue
+
+Desde un cliente, comprueba el certificado y la respuesta de Next.js a través
+de Caddy. La petición no usa una sesión ni muestra el contenido de la página.
+
+```bash
+curl --silent --show-error --fail --max-time 10 --output /dev/null \
+  --write-out '%{http_code}\n' "$AUTH_URL/login"
+```
+
+Espera 200. Si curl devuelve el código de salida 60, comprueba el nombre, la
+cadena y la vigencia del certificado con la comprobación TLS anterior. El
+código 35 señala un fallo al establecer TLS. Si curl muestra 502, revisa la
+conexión entre Caddy y Next.js. Si la conexión se rechaza o vence el plazo,
+comprueba DNS, cortafuegos y Caddy.
+
+En el servidor, usa las variables y el nombre de proyecto de la instalación.
+Consulta el estado y, según el componente que falle, sus últimos registros.
+
+```bash
+docker compose -p whatmeal-deploy -f compose.deploy.yml ps --all
+docker compose -p whatmeal-deploy -f compose.deploy.yml logs --tail 50 caddy whatmeal mongo
+docker compose -p whatmeal-deploy -f compose.deploy.yml logs --tail 50 mongo-provision db-prepare
+```
+
+Espera que Caddy esté en ejecución, que Next.js y MongoDB figuren como
+`healthy` y que `mongo-provision` y `db-prepare` terminen con código 0.
+El estado de Next.js comprueba `/login` dentro de su contenedor. El estado de
+MongoDB comprueba el proceso. Ejecuta la [comprobación autenticada de MongoDB](docs/persistence.md#diagnóstico-de-mongodb)
+para verificar también que la aplicación tiene acceso a su base. Registra los
+estados y mensajes de error pertinentes sin copiar credenciales, cookies ni
+contenido del diario.
+
 ### Actualización y recuperación
 
 Ensaya cada cambio en un proyecto desechable con un proxy aislado o en otro

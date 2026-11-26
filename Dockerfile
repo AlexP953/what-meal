@@ -8,7 +8,7 @@ COPY src ./src
 COPY public ./public
 
 FROM source AS db-prepare
-COPY scripts/db-prepare.ts ./scripts/
+COPY scripts/db-prepare.ts scripts/db-diagnose.ts ./scripts/
 COPY deploy/start-whatmeal.mjs ./deploy/
 USER node
 ENTRYPOINT ["node", "deploy/start-whatmeal.mjs"]

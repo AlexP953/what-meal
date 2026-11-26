@@ -403,3 +403,29 @@ interrupción deja recursos sin el marcador, consulta el proyecto indicado en
 `project-name` y elimina solo sus recursos antes de repetir el ensayo.
 
 [Compatibilidad de mongorestore](https://www.mongodb.com/docs/database-tools/mongorestore/mongorestore-behavior-access-usage/).
+
+### Diagnóstico de MongoDB
+
+Desde la revisión desplegada, exporta el mismo `AUTH_URL` y
+`WHATMEAL_SECRETS_DIR` de la instalación y usa su nombre de proyecto. Ejecuta
+la comprobación incluso cuando Next.js esté detenido. El contenedor temporal
+usa la cuenta de aplicación y consulta los metadatos de la colección `meals`.
+
+```bash
+docker compose -p whatmeal-deploy -f compose.deploy.yml run --rm -T --no-deps \
+  db-prepare --conditions=react-server --import tsx scripts/db-diagnose.ts
+```
+
+Espera `MongoDB application access OK` y código 0. Si aparece
+`MongoDB application access failed`, consulta el estado de MongoDB y los
+registros de `mongo`, `mongo-provision` y `db-prepare`. El mensaje también
+cubre problemas de credenciales o de preparación de la base. El arranque
+valida el origen HTTPS y los secretos antes de consultar MongoDB. Si indica
+un archivo de secretos inválido, comprueba su ruta y permisos sin mostrar su
+contenido. Repite el comando después de restablecer MongoDB.
+
+En un proyecto de ensayo, detén `mongo` y confirma que la comprobación
+devuelve un error aunque `/login` siga respondiendo. Inicia `mongo` y espera
+su estado `healthy`. Repite la comprobación y espera el mensaje de éxito.
+Consulta el [diagnóstico del despliegue](../README.md#diagnóstico-del-despliegue)
+para comprobar HTTPS y Next.js por separado.
