@@ -193,6 +193,238 @@ incluyen. La revisión de accesibilidad continúa siendo una comprobación de in
 Solo se excluyen archivos generados. No se admiten advertencias de lint.
 [Configuración oficial](https://nextjs.org/docs/app/api-reference/config/eslint#using-the-plugin-directly).
 
+## Despliegue HTTPS
+
+En un servidor Linux con Docker Engine y Compose 2.24 o posterior, usa un
+almacenamiento persistente para los volúmenes de Docker. La referencia fija
+Node.js 24.22.3, MongoDB 8.0.38 y Caddy 2.11.9 por digest. Usa una máquina
+compatible con MongoDB 8.0 y con espacio para compilar la aplicación y conservar
+los datos y certificados. Comprueba `docker info` y `docker compose version`.
+
+Clona el repositorio y selecciona la revisión que vas a desplegar con
+`git switch --detach <commit>`. Registra el resultado de `git rev-parse HEAD`.
+Usa un nombre de proyecto estable, por ejemplo `whatmeal-deploy`, en cada
+operación de esta instalación. Un nombre distinto usa otros volúmenes.
+
+Crea un registro DNS A para el servidor. Añade AAAA solo si el servidor acepta
+conexiones IPv6. Permite TCP 80 y 443 en el cortafuegos y en el proveedor.
+Deja libres esos puertos para Caddy. Caddy necesita salida a Internet para
+obtener y renovar el certificado. MongoDB y Next.js se comunican por redes
+privadas de Compose.
+
+Define `AUTH_URL` con el origen público, por ejemplo `https://comidas.tudominio.es`,
+sin barra final ni puerto explícito. Define `WHATMEAL_SECRETS_DIR` con la ruta
+absoluta a un directorio privado fuera del checkout. Los comandos siguientes
+suponen Docker Engine en modo rootful, sin reasignación de UID. El contenedor
+Next.js y la tarea de preparación leen archivos con UID 1000.
+
+```bash
+export AUTH_URL=https://comidas.tudominio.es
+export WHATMEAL_SECRETS_DIR=/etc/whatmeal/secrets
+sudo install -d -m 0700 -o "$(id -u)" "$WHATMEAL_SECRETS_DIR"
+sudo bash -eu -o noclobber -c '
+  umask 077
+  for name in auth-secret mongo-app-password mongo-root-password mongo-backup-password; do
+    openssl rand -hex 32 > "$1/$name"
+  done
+  chown 1000 "$1/auth-secret" "$1/mongo-app-password"
+' _ "$WHATMEAL_SECRETS_DIR"
+
+docker compose -p whatmeal-deploy -f compose.deploy.yml config --quiet
+docker compose -p whatmeal-deploy -f compose.deploy.yml build
+docker compose -p whatmeal-deploy -f compose.deploy.yml up -d --wait
+```
+
+Crea estos archivos una sola vez antes del primer arranque. Guarda los cuatro
+valores por separado en tu gestor de secretos. Conserva los archivos al
+reiniciar y actualizar. Cambiar el archivo de una contraseña de MongoDB
+requiere cambiar también la cuenta correspondiente en la base. La compilación
+y la ejecución mantienen desactivadas las notificaciones y prescinden de
+Firebase. Compose verifica la cuenta de aplicación y prepara la base antes de
+iniciar Next.js y Caddy.
+
+Si se interrumpe el primer arranque, repite `up -d --wait` con el mismo
+proyecto y los mismos secretos. La tarea de MongoDB crea la primera cuenta
+desde la conexión local o verifica la cuenta existente.
+
+En el primer arranque, sigue los registros de Caddy hasta que obtenga el
+certificado. Verifica HTTP, la cadena de confianza, el nombre y la caducidad
+del certificado desde otra red. Estos comandos usan el almacén de confianza del cliente.
+
+```bash
+curl -sSI "http://${AUTH_URL#https://}/login"
+curl -fsS -o /dev/null -w '%{http_code}\n' "$AUTH_URL/login"
+host=${AUTH_URL#https://}
+openssl s_client -connect "$host:443" -servername "$host" \
+  -verify_hostname "$host" -verify_return_error </dev/null |
+  openssl x509 -noout -subject -issuer -dates
+```
+
+Espera el estado 308, una cabecera `Location` con el origen HTTPS y ninguna
+cabecera `Set-Cookie` en HTTP. Espera 200 en HTTPS. Conserva el volumen `caddy-data` y mantén DNS
+y puertos web disponibles para que Caddy renueve el certificado. Consulta
+`docker compose -p whatmeal-deploy -f compose.deploy.yml logs --tail 50 caddy`
+para ver la emisión y los errores de renovación. Programa una comprobación
+periódica de la fecha de caducidad con el mismo cliente externo.
+
+[HTTPS automático de Caddy](https://caddyserver.com/docs/automatic-https).
+[Secretos en Docker Compose](https://docs.docker.com/compose/how-tos/use-secrets/).
+
+### Prueba desde Android
+
+Usa un despliegue temporal con datos ficticios y un certificado de confianza
+pública. En Android, desactiva el wifi y abre `$AUTH_URL/login` desde otra red.
+Crea una cuenta de prueba, inicia sesión y guarda una comida. Vuelve a abrir el
+diario y confirma que aparece. Comprueba en el inspector del navegador que la
+cookie `__Secure-authjs.session-token` tiene el atributo `Secure` y que las
+redirecciones de autenticación conservan el origen HTTPS.
+
+Desde otro cliente con Node.js y las dependencias del repositorio instaladas,
+ejecuta esta prueba complementaria. Comprueba la cookie y las redirecciones
+y verifica las respuestas 401 sin sesión y 403 desde un origen ajeno.
+
+```bash
+scratch=$(mktemp -d)
+node --import tsx scripts/deployment-diary-probe.ts --disposable seed "$AUTH_URL" "$scratch/diary.json"
+node --import tsx scripts/deployment-diary-probe.ts --disposable read "$AUTH_URL" "$scratch/diary.json"
+```
+
+La prueba crea una cuenta y una comida ficticias. Conserva el archivo privado
+si vas a comparar el diario tras una actualización o restauración. El archivo
+contiene las credenciales de la cuenta ficticia y los datos esperados. Elimínalo
+cuando termines y registra solo el resultado de las comprobaciones.
+
+Para programar y verificar copias, consulta [el procedimiento de copia](docs/persistence.md#copias-del-despliegue).
+
+### Diagnóstico del despliegue
+
+Desde un cliente, comprueba el certificado y la respuesta de Next.js a través
+de Caddy. La petición no usa una sesión ni muestra el contenido de la página.
+
+```bash
+curl --silent --show-error --fail --max-time 10 --output /dev/null \
+  --write-out '%{http_code}\n' "$AUTH_URL/login"
+```
+
+Espera 200. Si curl devuelve el código de salida 60, comprueba el nombre, la
+cadena y la vigencia del certificado con la comprobación TLS anterior. El
+código 35 señala un fallo al establecer TLS. Si curl muestra 502, revisa la
+conexión entre Caddy y Next.js. Si la conexión se rechaza o vence el plazo,
+comprueba DNS, cortafuegos y Caddy.
+
+En el servidor, usa las variables y el nombre de proyecto de la instalación.
+Consulta el estado y, según el componente que falle, sus últimos registros.
+
+```bash
+docker compose -p whatmeal-deploy -f compose.deploy.yml ps --all
+docker compose -p whatmeal-deploy -f compose.deploy.yml logs --tail 50 caddy whatmeal mongo
+docker compose -p whatmeal-deploy -f compose.deploy.yml logs --tail 50 mongo-provision db-prepare
+```
+
+Espera que Caddy esté en ejecución, que Next.js y MongoDB figuren como
+`healthy` y que `mongo-provision` y `db-prepare` terminen con código 0.
+El estado de Next.js comprueba `/login` dentro de su contenedor. El estado de
+MongoDB comprueba el proceso. Ejecuta la [comprobación autenticada de MongoDB](docs/persistence.md#diagnóstico-de-mongodb)
+para verificar también que la aplicación tiene acceso a su base. Registra los
+estados y mensajes de error pertinentes sin copiar credenciales, cookies ni
+contenido del diario.
+
+### Actualización y recuperación
+
+Ensaya cada cambio en un proyecto desechable con un proxy aislado o en otro
+servidor. Registra la revisión de What Meal, las imágenes de MongoDB y Caddy,
+y el nombre del proyecto. Conserva el
+nombre, los secretos y los volúmenes al aplicar el cambio al servidor. Haz una
+copia verificada antes de cada actualización y conserva la revisión que la
+generó. Sigue el [ensayo de restauración](docs/persistence.md#ensayo-de-restauración)
+para comprobar la copia antes de usarla para una recuperación.
+
+Prepara dos revisiones separadas si cambian tanto la aplicación como MongoDB.
+Primero usa una revisión de What Meal que conserve la imagen anterior de MongoDB.
+Desde la revisión nueva, usa las mismas variables de la instalación. Sustituye
+`whatmeal-deploy` por el nombre que usaste al instalar.
+
+```bash
+git rev-parse HEAD
+docker compose -p whatmeal-deploy -f compose.deploy.yml build whatmeal db-prepare &&
+docker compose -p whatmeal-deploy -f compose.deploy.yml run --rm --no-deps db-prepare &&
+docker compose -p whatmeal-deploy -f compose.deploy.yml up -d --wait --no-deps whatmeal
+```
+
+Comprueba el inicio de sesión, una comida existente y la escritura de una
+comida ficticia. Para actualizar MongoDB dentro de la serie 8.0, consulta las
+notas del parche y utiliza una revisión con la imagen nueva fijada por digest.
+Si hubo una actualización de serie reciente, verifica que la versión de
+compatibilidad de funcionalidades ya está estable antes de continuar.
+Detén la aplicación durante el cambio de MongoDB. Mantén suspendidos también
+los demás escritores hasta comprobar la base.
+
+```bash
+docker compose -p whatmeal-deploy -f compose.deploy.yml pull mongo &&
+docker compose -p whatmeal-deploy -f compose.deploy.yml stop whatmeal &&
+docker compose -p whatmeal-deploy -f compose.deploy.yml up -d --wait mongo &&
+docker compose -p whatmeal-deploy -f compose.deploy.yml run --rm --no-deps mongo-provision &&
+docker compose -p whatmeal-deploy -f compose.deploy.yml run --rm --no-deps db-prepare &&
+docker compose -p whatmeal-deploy -f compose.deploy.yml up -d --wait --no-deps whatmeal
+```
+
+Repite las comprobaciones de lectura y escritura. En un ensayo, usa la prueba
+del diario para comparar sus identificadores, propietarios, fechas y contenido
+antes y después de cada paso.
+
+Si falla solo la actualización de What Meal y la revisión anterior sigue siendo
+compatible con la base, vuelve a esa revisión y repite el bloque de actualización
+de la aplicación. Comprueba el diario antes de reanudar el servicio.
+
+Si falla MongoDB, conserva el volumen afectado. Restaura la copia anterior al
+cambio con la revisión que la creó y comprueba el diario en el proyecto nuevo.
+Antes de dirigir el tráfico al proyecto recuperado, suspende las escrituras
+en el original y configura los secretos recuperados y el mismo origen HTTPS
+en What Meal y Caddy. Si ambos proyectos comparten servidor, detén primero el
+proxy anterior para liberar los puertos web. Los datos creados después de la
+copia requieren recuperación aparte. Los cambios de serie de MongoDB requieren
+un procedimiento propio.
+
+`restart`, `up --force-recreate` y `down` conservan los volúmenes del despliegue.
+`down --volumes`, `docker volume rm` y ciertas variantes de `docker volume prune`
+pueden eliminar datos persistentes. Usa esas operaciones solo para recursos
+desechables identificados o para una retirada deliberada.
+
+[Actualización de parche de MongoDB 8.0](https://www.mongodb.com/docs/v8.0/tutorial/upgrade-revision/).
+
+#### Actualizar Caddy
+
+Desde la revisión nueva, conserva el nombre del proyecto, las variables de
+la instalación y los volúmenes `caddy-data` y `caddy-config`. Sustituye
+`whatmeal-deploy` por el nombre de tu instalación. Comprueba que What Meal
+está en ejecución. El siguiente bloque descarga la imagen fijada
+por digest, recrea solo Caddy y comprueba la imagen del contenedor activo.
+El servicio HTTPS puede interrumpirse brevemente durante el reemplazo.
+
+```bash
+(
+  set -euo pipefail
+  caddy_compose() { docker compose -p whatmeal-deploy -f compose.deploy.yml "$@"; }
+  expected_image=$(caddy_compose config --images | grep -E '^caddy:[^@]+@sha256:[0-9a-f]{64}$')
+  caddy_compose pull caddy
+  expected_id=$(docker image inspect --format '{{.Id}}' "$expected_image")
+  caddy_compose up -d --wait --no-deps --force-recreate caddy
+  proxy=$(caddy_compose ps --status running -q caddy)
+  active_id=$(docker inspect --format '{{.Image}}' "$proxy")
+  if [ "$active_id" != "$expected_id" ]; then
+    printf 'La imagen activa difiere de %s\n' "$expected_image" >&2
+    exit 1
+  fi
+  printf 'Imagen activa: %s\n' "$expected_image"
+)
+```
+
+Espera que el bloque muestre la imagen con el digest de `compose.deploy.yml`.
+Desde un cliente externo, ejecuta la comprobación HTTPS del
+[diagnóstico del despliegue](#diagnóstico-del-despliegue). Espera 200 y
+comprueba el nombre, la cadena y la vigencia del certificado con los comandos
+de [Despliegue HTTPS](#despliegue-https).
+
 ## MongoDB local
 
 Instala Docker Engine o Docker Desktop con Compose 2.24 o posterior.

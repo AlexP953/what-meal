@@ -1,0 +1,13 @@
+{
+	admin off
+	servers {
+		protocols h1 h2
+	}
+}
+
+{$AUTH_URL} {
+	reverse_proxy whatmeal:3000 {
+		header_up -Forwarded
+		header_up -X-Forwarded-Port
+	}
+}

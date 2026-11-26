@@ -1,0 +1,133 @@
+name: whatmeal-deploy
+
+x-mongo-image: &mongo-image mongo:8.0.38@sha256:479e85ced54ffb8a40dade1dcde2da2a9ae858515b9415e9cc54bfb8f0575d01
+
+x-whatmeal-runtime: &whatmeal-runtime
+  environment:
+    AUTH_URL: ${AUTH_URL:?Set AUTH_URL to your HTTPS origin}
+    NODE_ENV: production
+    NEXT_PUBLIC_NOTIFICATIONS_ENABLED: "false"
+  secrets:
+    - mongo_app_password
+    - auth_secret
+  networks: [database]
+
+services:
+  mongo:
+    image: *mongo-image
+    command: ["mongod", "--auth"]
+    volumes:
+      - mongo-data:/data/db
+    networks: [database]
+    healthcheck:
+      test: ["CMD", "mongosh", "--host", "mongo", "--quiet", "--eval", "quit(db.adminCommand({ping: 1}).ok ? 0 : 1)"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  mongo-provision:
+    image: *mongo-image
+    entrypoint: ["mongosh", "--nodb", "--quiet"]
+    command: ["--file", "/opt/deploy/provision-mongo.js"]
+    secrets:
+      - mongo_root_password
+      - mongo_app_password
+      - mongo_backup_password
+    volumes:
+      - ./deploy/provision-mongo.js:/opt/deploy/provision-mongo.js:ro
+    network_mode: service:mongo
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  db-prepare:
+    <<: *whatmeal-runtime
+    build:
+      context: .
+      target: db-prepare
+    depends_on:
+      mongo-provision:
+        condition: service_completed_successfully
+
+  whatmeal:
+    <<: *whatmeal-runtime
+    networks: [backend, database]
+    build:
+      context: .
+      target: runner
+    depends_on:
+      db-prepare:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r => process.exit(r.status === 200 ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    environment:
+      AUTH_URL: ${AUTH_URL:?Set AUTH_URL to your HTTPS origin}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [edge, backend]
+    depends_on:
+      whatmeal:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mongo-backup:
+    image: *mongo-image
+    profiles: [operations]
+    entrypoint: ["bash", "/opt/deploy/mongo-dump.sh"]
+    command: ["version"]
+    secrets:
+      - mongo_backup_password
+    volumes:
+      - ./deploy/mongo-dump.sh:/opt/deploy/mongo-dump.sh:ro
+    networks: [database]
+    # The attached stdout stream carries the archive. Keep it out of Docker logs.
+    logging:
+      driver: none
+
+  mongo-restore:
+    image: *mongo-image
+    profiles: [operations]
+    entrypoint: ["bash", "/opt/deploy/mongo-restore.sh"]
+    secrets:
+      - mongo_root_password
+    volumes:
+      - ./deploy/mongo-restore.sh:/opt/deploy/mongo-restore.sh:ro
+    networks: [database]
+    logging:
+      driver: none
+
+secrets:
+  auth_secret:
+    file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/auth-secret
+  mongo_root_password:
+    file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/mongo-root-password
+  mongo_backup_password:
+    file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/mongo-backup-password
+  mongo_app_password:
+    file: ${WHATMEAL_SECRETS_DIR:?Set WHATMEAL_SECRETS_DIR}/mongo-app-password
+
+networks:
+  edge:
+  backend:
+    internal: true
+  database:
+    internal: true
+
+volumes:
+  mongo-data:
+  caddy-data:
+  caddy-config:

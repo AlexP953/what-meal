@@ -306,3 +306,130 @@ Los errores de conexión son `DatabaseConnectionError`. Los errores de datos son
 `ValidationError` o `CastError`. La duplicidad usa el código MongoDB `11000`.
 Los códigos HTTP y permisos de cuentas siguen la matriz anterior. Las operaciones
 del diario conservan sus contratos y la autorización mediante `requireSession`.
+
+## Copias del despliegue
+
+La copia usa las herramientas de la imagen fijada de MongoDB y una cuenta de
+solo lectura sobre `whatmeal`. Incluye las colecciones de la base, sus opciones
+y sus índices. Las cuentas de MongoDB se vuelven a aprovisionar desde los
+archivos de secretos. Las cuentas de What Meal forman parte de la copia.
+
+Si la instalación ya existía antes de añadir las copias, genera únicamente
+`mongo-backup-password` en el mismo directorio de secretos. Desde la revisión
+nueva, ejecuta `docker compose -p whatmeal-deploy -f compose.deploy.yml run --rm mongo-provision`
+para crear la cuenta de lectura. Sustituye `whatmeal-deploy` si usas otro nombre
+de proyecto.
+
+Ejecuta la tarea en Linux con Bash, util-linux (`flock`), GNU Coreutils y gzip.
+Crea un directorio privado en un volumen cifrado, accesible solo para la cuenta
+que ejecutará la tarea. Exporta el mismo `AUTH_URL` y `WHATMEAL_SECRETS_DIR` del
+despliegue. Si usaste `-p` con otro nombre, exporta el mismo nombre en
+`WHATMEAL_PROJECT_NAME`. Ejecuta la tarea desde la revisión desplegada.
+
+```bash
+install -d -m 0700 "$HOME/whatmeal-backups"
+bash scripts/backup-deploy.sh "$HOME/whatmeal-backups"
+```
+
+Programa la tarea durante una ventana de mantenimiento. Suspende cualquier
+otro escritor de la base y espera a que termine su trabajo antes de copiar.
+Evita actualizaciones, cambios de esquema y arranques manuales durante la
+ventana. La tarea detiene What Meal y recupera su estado anterior, incluso
+cuando falla la copia. El comando devuelve un error si no puede recuperar el
+servicio. Caddy puede responder 502 mientras la aplicación está parada. MongoDB puede
+seguir eliminando límites de acceso caducados por TTL durante la copia.
+
+El comando devuelve la ruta de una copia publicada. Los directorios
+`.incomplete.*` corresponden a copias en curso o interrumpidas. Comprueba una
+copia publicada antes de transferirla o restaurarla.
+
+```bash
+cd /ruta/a/la/copia-publicada
+sha256sum --strict -c SHA256SUMS
+gzip -t database.archive.gz
+```
+
+Transfiere el directorio con sus tres archivos mediante un canal cifrado a un
+destino externo protegido. Guarda el acceso a ese destino en el gestor de
+secretos. Por ejemplo, programa una copia diaria con un temporizador de
+systemd que cargue las variables públicas del despliegue y registre solo el
+resultado. Configura la retención en el destino externo según los objetivos
+de recuperación de la instalación. Comprueba periódicamente la restauración
+antes de retirar copias antiguas.
+
+[Opciones de mongodump](https://www.mongodb.com/docs/database-tools/mongodump/).
+
+### Ensayo de restauración
+
+Usa una copia con datos ficticios y la revisión del despliegue que la creó.
+Usa un directorio privado en almacenamiento cifrado para la copia temporal
+y los secretos. Configura el almacenamiento de Docker sobre un disco cifrado
+con espacio para el volumen de MongoDB.
+Elige una ruta nueva fuera de la copia. El comando verifica las sumas y la
+versión exacta de MongoDB. Crea un proyecto Compose con una red, un volumen y
+secretos propios. Requiere Docker Engine en modo rootful, sin reasignación de
+UID. Los dos secretos de la aplicación quedan con modo `0600` y UID `1000`.
+El comando restaura la base `whatmeal` y conserva sus índices.
+
+```bash
+workspace="$HOME/ensayo-restauracion"
+bash scripts/restore-deploy.sh /ruta/a/la/copia-publicada "$workspace"
+test -f "$workspace/restore-complete"
+export AUTH_URL=https://localhost
+export WHATMEAL_SECRETS_DIR="$workspace/secrets"
+project=$(cat "$workspace/project-name")
+docker compose -p "$project" -f compose.deploy.yml up -d --wait whatmeal
+```
+
+La aplicación de ensayo queda en la red privada. Para comprobarla desde un
+cliente HTTPS, conecta un proxy de ensayo aislado a esa red. Usa un origen
+distinto del despliegue principal y configura el mismo `AUTH_URL` en la
+aplicación y el proxy. En una máquina de ensayo también puedes usar Caddy con
+`https://localhost` y una configuración Compose que limite sus puertos a
+`127.0.0.1`. Confía en la autoridad local solo en el cliente de ensayo.
+Ejecuta el modo `read` de la prueba del diario con el archivo privado creado
+antes de la copia. Comprueba el inicio de sesión y que la comida conserva su
+identificador, propietario, fecha y contenido. Compara los índices de las
+colecciones con los del origen. El origen puede seguir en funcionamiento.
+
+El comando devuelve un error si faltan archivos, las sumas no coinciden, la
+versión difiere o MongoDB rechaza el archivo. Usa el marcador
+`restore-complete` para identificar un ensayo terminado. Al acabar, elimina
+solo los recursos del proyecto de ensayo mediante los comandos siguientes.
+
+```bash
+test -f "$workspace/restore-complete" &&
+  docker compose -p "$project" -f compose.deploy.yml down --volumes
+```
+
+Borra después el directorio de ensayo y su archivo privado de prueba. Si una
+interrupción deja recursos sin el marcador, consulta el proyecto indicado en
+`project-name` y elimina solo sus recursos antes de repetir el ensayo.
+
+[Compatibilidad de mongorestore](https://www.mongodb.com/docs/database-tools/mongorestore/mongorestore-behavior-access-usage/).
+
+### Diagnóstico de MongoDB
+
+Desde la revisión desplegada, exporta el mismo `AUTH_URL` y
+`WHATMEAL_SECRETS_DIR` de la instalación y usa su nombre de proyecto. Ejecuta
+la comprobación incluso cuando Next.js esté detenido. El contenedor temporal
+usa la cuenta de aplicación y consulta los metadatos de la colección `meals`.
+
+```bash
+docker compose -p whatmeal-deploy -f compose.deploy.yml run --rm -T --no-deps \
+  db-prepare --conditions=react-server --import tsx scripts/db-diagnose.ts
+```
+
+Espera `MongoDB application access OK` y código 0. Si aparece
+`MongoDB application access failed`, consulta el estado de MongoDB y los
+registros de `mongo`, `mongo-provision` y `db-prepare`. El mensaje también
+cubre problemas de credenciales o de preparación de la base. El arranque
+valida el origen HTTPS y los secretos antes de consultar MongoDB. Si indica
+un archivo de secretos inválido, comprueba su ruta y permisos sin mostrar su
+contenido. Repite el comando después de restablecer MongoDB.
+
+En un proyecto de ensayo, detén `mongo` y confirma que la comprobación
+devuelve un error aunque `/login` siga respondiendo. Inicia `mongo` y espera
+su estado `healthy`. Repite la comprobación y espera el mensaje de éxito.
+Consulta el [diagnóstico del despliegue](../README.md#diagnóstico-del-despliegue)
+para comprobar HTTPS y Next.js por separado.

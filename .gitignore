@@ -40,3 +40,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Deployment secrets
+/.deploy-secrets/
+auth-secret
+mongo-root-password
+mongo-app-password
+mongo-backup-password
