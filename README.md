@@ -392,6 +392,39 @@ desechables identificados o para una retirada deliberada.
 
 [Actualización de parche de MongoDB 8.0](https://www.mongodb.com/docs/v8.0/tutorial/upgrade-revision/).
 
+#### Actualizar Caddy
+
+Desde la revisión nueva, conserva el nombre del proyecto, las variables de
+la instalación y los volúmenes `caddy-data` y `caddy-config`. Sustituye
+`whatmeal-deploy` por el nombre de tu instalación. Comprueba que What Meal
+está en ejecución. El siguiente bloque descarga la imagen fijada
+por digest, recrea solo Caddy y comprueba la imagen del contenedor activo.
+El servicio HTTPS puede interrumpirse brevemente durante el reemplazo.
+
+```bash
+(
+  set -euo pipefail
+  caddy_compose() { docker compose -p whatmeal-deploy -f compose.deploy.yml "$@"; }
+  expected_image=$(caddy_compose config --images | grep -E '^caddy:[^@]+@sha256:[0-9a-f]{64}$')
+  caddy_compose pull caddy
+  expected_id=$(docker image inspect --format '{{.Id}}' "$expected_image")
+  caddy_compose up -d --wait --no-deps --force-recreate caddy
+  proxy=$(caddy_compose ps --status running -q caddy)
+  active_id=$(docker inspect --format '{{.Image}}' "$proxy")
+  if [ "$active_id" != "$expected_id" ]; then
+    printf 'La imagen activa difiere de %s\n' "$expected_image" >&2
+    exit 1
+  fi
+  printf 'Imagen activa: %s\n' "$expected_image"
+)
+```
+
+Espera que el bloque muestre la imagen con el digest de `compose.deploy.yml`.
+Desde un cliente externo, ejecuta la comprobación HTTPS del
+[diagnóstico del despliegue](#diagnóstico-del-despliegue). Espera 200 y
+comprueba el nombre, la cadena y la vigencia del certificado con los comandos
+de [Despliegue HTTPS](#despliegue-https).
+
 ## MongoDB local
 
 Instala Docker Engine o Docker Desktop con Compose 2.24 o posterior.
