@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">What Meal</string>
+    <string name="load_error">No se pudo abrir What Meal.</string>
+    <string name="retry">Reintentar</string>
 </resources>

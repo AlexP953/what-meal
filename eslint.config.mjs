@@ -7,7 +7,7 @@ import globals from "globals";
 
 // Use compatible plugins directly, without eslint-config-next's older peers.
 export default defineConfig([
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+  globalIgnores([".next/**", "out/**", "build/**", "android/**/build/**", "next-env.d.ts"]),
   js.configs.recommended,
   ...ts.configs.recommended,
   { languageOptions: { globals: globals.node } },

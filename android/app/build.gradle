@@ -8,6 +8,20 @@ if (System.getProperty('java.runtime.version') != '17.0.21+9' ||
     throw new GradleException('Set JAVA_HOME to Eclipse Temurin 17.0.21+9.')
 }
 
+def originError = 'Set WHAT_MEAL_ORIGIN to the HTTPS origin from AUTH_URL, without a path, query or fragment.'
+def origin
+try {
+    origin = new URI(providers.environmentVariable('WHAT_MEAL_ORIGIN').getOrElse(''))
+} catch (URISyntaxException ignored) {
+    throw new GradleException(originError)
+}
+def authority = origin.host + (origin.port == -1 ? '' : ":${origin.port}")
+if (!'https'.equalsIgnoreCase(origin.scheme) || !origin.host ||
+        origin.rawAuthority != authority || origin.port == 0 || origin.port > 65535 ||
+        !(origin.rawPath in ['', '/']) || origin.rawQuery != null || origin.rawFragment != null) {
+    throw new GradleException(originError)
+}
+
 android {
     namespace = 'com.whatmeal.app'
     compileSdk = 35
@@ -19,6 +33,11 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = '1.0.0'
+        buildConfigField 'String', 'SERVICE_ORIGIN', '"' + "https://${authority.toLowerCase(Locale.ROOT)}" + '"'
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     compileOptions {
@@ -31,4 +50,8 @@ kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
 }
