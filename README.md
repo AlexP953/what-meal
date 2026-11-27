@@ -60,6 +60,68 @@ Con nvm, ejecuta `nvm install` y `nvm use`. Comprueba `node --version` y
 `npm --version` antes de ejecutar `npm ci`. El archivo de bloqueo se versiona.
 No utilices `--force` ni `--legacy-peer-deps`.
 
+## APK de Android
+
+El APK requiere Android 15 (API 35) y un proveedor WebView compatible con Web
+Locks. Abre el acceso o el diario según la sesión que valide el servidor en
+`/android`. Despliega una revisión que incluya esa ruta. El origen debe usar
+HTTPS con un certificado de confianza pública. El servicio de ensayo mantiene
+las notificaciones desactivadas y funciona sin credenciales de Firebase.
+
+### Compilación reproducible
+
+Usa Eclipse Temurin **17.0.21+9**, Gradle Wrapper **8.13**, Android Gradle Plugin
+**8.13.2**, Kotlin **2.2.21**, Android SDK Platform **35 revisión 2** y Build
+Tools **35.0.0**. El Wrapper comprueba el SHA-256 de Gradle y
+`android/gradle/verification-metadata.xml` fija los SHA-256 de los artefactos
+que resuelve Gradle. Las pruebas unitarias usan JUnit **4.13.2**.
+
+Configura `JAVA_HOME` y `ANDROID_HOME` con esas instalaciones. Exporta el mismo
+origen que usa `AUTH_URL` en el despliegue. Usa el nombre canónico del host,
+tal como lo muestra el navegador, y el puerto si es distinto de 443.
+
+```bash
+export WHAT_MEAL_ORIGIN="${AUTH_URL%/}"
+grep -x 'Pkg.Revision=2' "$ANDROID_HOME/platforms/android-35/source.properties"
+cd android
+./gradlew --version
+./gradlew :app:testReleaseUnitTest :app:lintRelease
+./gradlew --no-build-cache --no-daemon clean :app:assembleRelease
+sha256sum app/build/outputs/apk/release/app-release-unsigned.apk
+```
+
+El APK sin firmar queda en
+`android/app/build/outputs/apk/release/app-release-unsigned.apk` desde la raíz
+del repositorio. Para comprobar la reproducibilidad, ejecuta la compilación
+limpia desde dos copias independientes de la misma revisión con el mismo
+origen, sistema y herramientas. Los dos SHA-256 deben coincidir.
+
+### Firma y verificación
+
+Usa un almacén con una clave de distribución de prueba fuera del repositorio.
+Desde `android`, define `WHAT_MEAL_TEST_KEYSTORE` con la ruta de ese almacén y
+`WHAT_MEAL_SIGNED_APK` con la ruta de salida fuera del repositorio. La herramienta
+de firma solicita la contraseña en la terminal.
+
+```bash
+tools="$ANDROID_HOME/build-tools/35.0.0"
+unsigned=app/build/outputs/apk/release/app-release-unsigned.apk
+"$tools/zipalign" -c -P 16 4 "$unsigned"
+"$tools/apksigner" sign --ks "$WHAT_MEAL_TEST_KEYSTORE" --out "$WHAT_MEAL_SIGNED_APK" "$unsigned"
+"$tools/apksigner" verify --verbose --print-certs "$WHAT_MEAL_SIGNED_APK"
+sha256sum "$WHAT_MEAL_SIGNED_APK"
+"$ANDROID_HOME/platform-tools/adb" install "$WHAT_MEAL_SIGNED_APK"
+```
+
+Prepara una base aislada con [el procedimiento de base nueva](#preparar-la-base-nueva).
+Antes de abrir What Meal desde el lanzador, verifica con acceso de solo lectura
+que las colecciones `users` y `meals` tengan cero documentos. Repite el
+[recorrido móvil](#primer-recorrido-del-diario-en-móvil) en el emulador Pixel 7
+con Android 15 y Google APIs. Vuelve a abrir What Meal después de iniciar
+sesión, crear una comida y editarla. Registra la revisión, el SHA-256 del APK
+firmado, los resultados y la versión que muestra `adb shell dumpsys webviewupdate`.
+Confirma que la cookie conserva `Secure` y `HttpOnly` sin registrar su valor.
+
 ## Primer administrador y recuperación
 
 Crea primero una cuenta normal en `/register`. En el servidor autorizado,
