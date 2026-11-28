@@ -30,6 +30,29 @@ Cada archivo genera una base `whatmeal_test_<uuid>`. La limpieza comprueba el no
 exacto de su base antes de eliminarla y siempre cierra la conexión.
 Las pruebas nunca utilizan `MONGODB_DB` para elegir un destino de limpieza.
 
+## Recuentos del recorrido publicado
+
+Configura `WHAT_MEAL_TEST_MONGODB_URI` como secreto en la sesión privada del
+operador autorizado. Usa un [usuario de Atlas de solo lectura](https://www.mongodb.com/docs/atlas/security-add-mongodb-users/)
+limitado al clúster y a la base autorizados para What Meal. `MONGODB_URI` es la
+conexión de escritura de la aplicación. `TEST_MONGODB_URI` pertenece a las pruebas
+con bases aisladas. El recuento usa exclusivamente `WHAT_MEAL_TEST_MONGODB_URI`.
+
+Desde la raíz del repositorio y con las dependencias instaladas, indica la base
+exacta usada en Production, el correo ficticio de `example.com` y el número de
+comidas tras el recorrido. Sustituye `BASE_AUTORIZADA` y usa el correo que registraste.
+
+```bash
+node --import tsx scripts/deployment-counts.ts BASE_AUTORIZADA whatmeal-prueba-001@example.com 2
+```
+
+El comando consulta el correo exacto normalizado y cuenta las comidas por el
+identificador de esa cuenta. Un resultado correcto muestra
+`{"accounts":1,"meals":2,"passed":true}` y devuelve el estado 0. Una discrepancia
+muestra los recuentos con `passed:false` y devuelve el estado 1. Un correo
+ambiguo, una entrada inválida o un fallo de conexión devuelve el estado 1 con
+un mensaje genérico. Registra solo la salida y el estado del comando.
+
 ## Límites de acceso
 
 `access_limits` comparte ventanas móviles entre procesos mediante actualizaciones
