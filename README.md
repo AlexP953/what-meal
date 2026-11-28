@@ -193,6 +193,62 @@ incluyen. La revisión de accesibilidad continúa siendo una comprobación de in
 Solo se excluyen archivos generados. No se admiten advertencias de lint.
 [Configuración oficial](https://nextjs.org/docs/app/api-reference/config/eslint#using-the-plugin-directly).
 
+## Publicación gratuita en Vercel
+
+Aplica los cambios remotos y comprueba el dominio público durante la publicación.
+Usa el proyecto de What Meal en [Vercel Hobby](https://vercel.com/docs/plans/hobby)
+para uso personal y no comercial, y el clúster autorizado de
+[Atlas Free](https://www.mongodb.com/docs/atlas/reference/free-shared-limitations/).
+Conserva el clúster y la base actuales si ya contienen datos. En Vercel, confirma
+el preset Next.js, [Node.js 24.x](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions)
+y el dominio de producción asignado al proyecto.
+Si el proyecto usa Vercel Authentication, el alcance
+[Standard Protection](https://vercel.com/docs/deployment-protection#standard-protection)
+permite abrir el dominio de producción y mantiene protegidas las vistas previas.
+
+Configura estas variables en **Settings → Environment Variables → Production**:
+
+| Variable | Valor |
+| --- | --- |
+| `AUTH_URL` | Origen HTTPS del dominio público de producción, sin ruta. |
+| `AUTH_SECRET` | Secreto privado de producción. Genéralo según [Configuración](#configuración) en la primera publicación y consérvalo entre despliegues. |
+| `MONGODB_URI` | URI privada de Atlas con el usuario de la aplicación, limitado a la base de What Meal. |
+| `MONGODB_DB` | Nombre explícito de la base autorizada. |
+| `NEXT_PUBLIC_NOTIFICATIONS_ENABLED` | `false` al compilar. Omite las variables de Firebase. |
+
+Comprueba que Atlas admite la conexión desde el entorno de Vercel y desde la
+máquina autorizada para preparar la base. Revisa la
+[lista de acceso de Atlas](https://www.mongodb.com/docs/atlas/security/ip-access-list/)
+del proyecto antes de cambiarla. Sus reglas afectan a todos los clústeres del
+proyecto. Las [salidas de Hobby son dinámicas](https://vercel.com/docs/networking/static-ips).
+Si necesitas admitir cualquier IP, solicita autorización antes de ampliar
+el acceso al proyecto de Atlas.
+Mantén TLS y la autenticación de Atlas, con credenciales exclusivas para What Meal.
+
+Desde la máquina autorizada, inyecta en una sesión privada `MONGODB_URI` y
+`MONGODB_DB` para la misma base. Usa una cuenta autorizada para crear
+colecciones e índices y ejecuta `npm run db:prepare`. Comprueba que muestra
+`Database prepared.`. Ejecuta las pruebas de integración solo con MongoDB
+aislado. Tras guardar las variables, crea un despliegue nuevo de la revisión
+aprobada en **Production** y espera el estado **Ready**.
+
+### Comprobar el acceso público
+
+1. En **Deployments**, confirma que la URL de producción apunta a la revisión
+   aprobada. Anota el SHA, el identificador del despliegue y la URL pública.
+2. Confirma **Hobby** en la configuración del equipo de Vercel y **Free** en
+   la ficha del clúster de Atlas. Registra ambos planes.
+3. En una ventana privada, abre `/login` en el dominio público. Confirma que
+   aparece What Meal directamente y que el navegador acepta el certificado HTTPS.
+4. Registra un correo ficticio único. Confirma el aviso de cuenta creada en
+   `/login` y que `/meals` todavía solicita acceso.
+5. Inicia sesión, abre `/meals` y recarga la página. Confirma que conserva la
+   sesión y que las redirecciones mantienen el origen HTTPS de producción.
+6. En las herramientas del navegador, comprueba el atributo `Secure` de la
+   cookie de sesión de Auth.js. Registra el resultado sin copiar su valor.
+7. Cierra sesión desde el menú. Abre `/meals` directamente y comprueba que
+   vuelve a `/login` en el mismo origen HTTPS.
+
 ## Despliegue HTTPS
 
 En un servidor Linux con Docker Engine y Compose 2.24 o posterior, usa un
