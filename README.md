@@ -564,21 +564,55 @@ teclado en desarrollo y producción. También comprueba consola, etiquetas, erro
 400/409/429, desconexión y recuperación de los formularios. HTTP no sustituye
 esa comprobación de interacción ni la inspección visual.
 
-## Primer recorrido del diario en móvil
+## Recorrido de verificación del diario
 
-Inicia MongoDB y Next.js con la guía de [instalación desde cero](#instalación-desde-cero).
-Usa una cuenta nueva y datos de prueba.
+Usa la [instalación local](#instalación-desde-cero) con MongoDB aislado o el
+[dominio público](#publicación-gratuita-en-vercel) durante la publicación.
+Usa dos cuentas ficticias nuevas con rol normal y correos distintos.
 
 1. Abre `/login` y selecciona **Crear una cuenta**. Registra un correo nuevo y
    confirma que el aviso de cuenta creada aparece en la pantalla de acceso.
-2. Inicia sesión. El diario vacío explica cómo empezar. Selecciona **Añadir comida**,
-   introduce un nombre y una fecha, elige el tipo y la reacción, y guarda.
-3. Abre **Filtros**. Combina tipo, reacciones y fechas. Aplica una combinación sin
-   coincidencias y selecciona **Limpiar filtros** para recuperar la lista completa.
-4. Abre la fila de la comida, cambia un campo y vacía un dato opcional. Guarda y
-   comprueba el aviso. Selecciona **Eliminar**, cancela una vez y confirma después.
-5. Abre **Menú de cuenta** y selecciona **Cerrar sesión**. Vuelve a `/meals` y
-   comprueba que el acceso solicita autenticación.
+2. Inicia sesión con la primera cuenta. Abre **Añadir comida** y crea estas
+   comidas. Crea al menos una desde el móvil y otra desde el escritorio.
+   Recarga en ambos navegadores y comprueba que aparecen las tres.
+
+   | Nombre | Fecha | Tipo | Reacción | Lugar |
+   | --- | --- | --- | --- | --- |
+   | Arroz de prueba | 2026-01-12 | Comida | Bien | Casa |
+   | Pasta de prueba | 2026-01-13 | Comida | Mal | |
+   | Cena para eliminar | 2026-01-14 | Cena | Bien | |
+
+3. Abre **Filtros** y aplica **Comida**, **Bien** y el intervalo del 12 al
+   13 de enero de 2026. Comprueba que solo queda **Arroz de prueba**.
+   Cambia el tipo a **Desayuno** y comprueba que no hay coincidencias.
+   Pulsa **Limpiar filtros** y confirma que reaparecen las tres comidas.
+4. Abre **Arroz de prueba**, cambia su nombre a **Arroz editado** y borra
+   **Lugar**. Guarda, recarga y abre la comida para comprobar los dos cambios.
+5. Con la primera cuenta, abre `/api/meals` y conserva el `id` de
+   **Arroz editado** y de **Cena para eliminar** en una nota privada.
+6. Abre **Cena para eliminar** y selecciona **Eliminar**. Pulsa **Cancelar**
+   y recarga para comprobar que sigue presente. Repite la operación con
+   **Eliminar comida** y recarga para comprobar que desapareció.
+7. En otro perfil de navegador, entra con la segunda cuenta y crea una comida
+   ficticia. Comprueba que la lista del diario y `/api/meals` solo muestran
+   esa comida. Usa su sesión para las comprobaciones de permisos de abajo.
+8. Cierra sesión desde **Menú de cuenta** y confirma que `/meals` vuelve a
+   `/login`.
+
+Desde la consola de `/meals` en el perfil de la segunda cuenta, sustituye
+`ID_ARROZ_EDITADO` por el identificador guardado. Usa solo la comida ficticia.
+Ambas peticiones deben mostrar `403`. Vuelve a la primera cuenta y comprueba
+que el nombre sigue siendo **Arroz editado**.
+
+```js
+const comidaAjena = "/api/meals/ID_ARROZ_EDITADO";
+console.log((await fetch(comidaAjena)).status);
+console.log((await fetch(comidaAjena, {
+  method: "PATCH",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ name: "Edición denegada" }),
+})).status);
+```
 
 Haz el recorrido a 320 píxeles CSS y en una pantalla ancha. Usa Tab, Mayús+Tab
 y Escape para comprobar el foco de los diálogos. En un dispositivo o emulador
