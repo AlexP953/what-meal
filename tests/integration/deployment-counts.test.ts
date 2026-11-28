@@ -11,10 +11,10 @@ const otherEmail = "whatmeal-other@example.com";
 const failure = "Deployment count check failed. Check the inputs and the read-only connection.\n";
 
 function count(args: string[], uri = process.env.MONGODB_URI) {
-  const env = { ...process.env };
+  const env: NodeJS.ProcessEnv = { ...process.env, MONGODB_LOG_COMMAND: "debug" };
   delete env.WHAT_MEAL_TEST_MONGODB_URI;
   if (uri) env.WHAT_MEAL_TEST_MONGODB_URI = uri;
-  return spawnSync(process.execPath, ["--import", "tsx", "scripts/deployment-counts.ts", ...args], {
+  return spawnSync(process.execPath, ["--import", "tsx", "--disable-warning=MONGODB DRIVER", "scripts/deployment-counts.ts", ...args], {
     env,
     encoding: "utf8",
     timeout: 10000,
@@ -39,6 +39,15 @@ it.each([[email.toUpperCase(), "1", 1], [otherEmail, "2", 2]])("counts only meal
   expect(result.status).toBe(0);
   expect(result.stderr).toBe("");
   expect(JSON.parse(result.stdout)).toEqual({ accounts: 1, meals, passed: true });
+});
+
+it("keeps driver warnings out of the documented command's result", () => {
+  const uri = new URL(process.env.MONGODB_URI!);
+  uri.searchParams.set("timeoutMS", "5000");
+  const result = count([database.name, email, "1"], uri.href);
+  expect(result.status).toBe(0);
+  expect(result.stderr).toBe("");
+  expect(JSON.parse(result.stdout)).toEqual({ accounts: 1, meals: 1, passed: true });
 });
 
 it.each([[email, "2", 1, 1], ["missing@example.com", "0", 0, 0]])("fails on a count mismatch for %s", (account, expected, accounts, meals) => {

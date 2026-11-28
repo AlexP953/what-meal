@@ -13,7 +13,15 @@ async function count() {
     throw new Error();
   }
 
-  const client = new mongo.MongoClient(uri, { serverSelectionTimeoutMS: 5000, socketTimeoutMS: 5000 });
+  const client = new mongo.MongoClient(uri, {
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 5000,
+    // Override driver diagnostics inherited from the operator's environment.
+    mongodbLogComponentSeverities: {
+      default: "off", command: "off", topology: "off",
+      serverSelection: "off", connection: "off", client: "off",
+    },
+  });
   try {
     const db = client.db(dbName);
     const matches = await db.collection("users").find({ email: email.data }, {

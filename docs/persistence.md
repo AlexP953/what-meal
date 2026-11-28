@@ -43,7 +43,8 @@ exacta usada en Production, el correo ficticio de `example.com` y el número de
 comidas tras el recorrido. Sustituye `BASE_AUTORIZADA` y usa el correo que registraste.
 
 ```bash
-node --import tsx scripts/deployment-counts.ts BASE_AUTORIZADA whatmeal-prueba-001@example.com 2
+node --import tsx --disable-warning='MONGODB DRIVER' scripts/deployment-counts.ts \
+  BASE_AUTORIZADA whatmeal-prueba-001@example.com 2
 ```
 
 El comando consulta el correo exacto normalizado y cuenta las comidas por el
