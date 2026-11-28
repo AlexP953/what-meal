@@ -54,6 +54,14 @@ muestra los recuentos con `passed:false` y devuelve el estado 1. Un correo
 ambiguo, una entrada inválida o un fallo de conexión devuelve el estado 1 con
 un mensaje genérico. Registra solo la salida y el estado del comando.
 
+En la [comprobación tras redesplegar](../README.md#comprobar-la-persistencia-tras-redesplegar),
+ejecuta el comando antes y después con la misma base, cuenta ficticia y total
+esperado. Registra ambos resultados junto con los identificadores de despliegue,
+la revisión y el resultado de las comprobaciones del repositorio y de producción.
+Conserva en privado las respuestas del diario hasta comparar los identificadores
+y campos. Retira los archivos temporales al terminar y omite credenciales,
+cookies y cadenas de conexión en el registro de resultados.
+
 ## Límites de acceso
 
 `access_limits` comparte ventanas móviles entre procesos mediante actualizaciones

@@ -249,6 +249,36 @@ aprobada en **Production** y espera el estado **Ready**.
 7. Cierra sesión desde el menú. Abre `/meals` directamente y comprueba que
    vuelve a `/login` en el mismo origen HTTPS.
 
+### Comprobar la persistencia tras redesplegar
+
+1. Usa un árbol de trabajo limpio en la revisión aprobada. Ejecuta
+   `npm run verify:local` y conserva el comando, el SHA y el resultado junto
+   con las demás comprobaciones del repositorio.
+2. En el dominio público, ejecuta el [recorrido del diario](#recorrido-de-verificación-del-diario)
+   con un correo ficticio único de `example.com` para la primera cuenta.
+   Conserva temporalmente su credencial en un gestor de contraseñas privado.
+3. Vuelve a iniciar sesión con la primera cuenta. En una carpeta privada temporal
+   creada con `mktemp -d`, guarda las respuestas JSON de `/api/meals` y de
+   `/api/meals/<id>` para cada comida conservada. Confirma que las tres respuestas
+   devuelven 200 y que cada identificador y campo coincide con el recorrido.
+   La lista contiene **Arroz editado** y **Pasta de prueba**. Registra el 404
+   `MEAL_NOT_FOUND` de `/api/meals/<id>` para **Cena para eliminar**.
+4. Ejecuta el [recuento de solo lectura](docs/persistence.md#recuentos-del-recorrido-publicado)
+   para la primera cuenta. Comprueba que devuelve una cuenta y dos comidas.
+5. En **Deployments** de Vercel, abre el despliegue comprobado y selecciona
+   **Redeploy**. Cuando el nuevo despliegue esté **Ready** y sirva el dominio
+   público, confirma que la revisión coincide y que el identificador cambió.
+   Usa el mismo clúster, base de datos y configuración de autenticación.
+6. Cierra todas las ventanas privadas y abre una nueva. Comprueba que `/meals`
+   solicita acceso e inicia sesión con la misma cuenta sin registrarla de nuevo.
+   Confirma que la lista y los detalles devuelven 200 y coinciden con los JSON
+   anteriores. Repite la consulta de la comida eliminada y confirma el 404
+   `MEAL_NOT_FOUND`. Ejecuta el recuento de nuevo y compara ambos resultados.
+7. Registra la URL pública, la revisión, los dos identificadores de despliegue,
+   los planes activos, los resultados del acceso y del diario, el 404 y ambos
+   recuentos. Omite contraseñas, cookies y cadenas de conexión. Elimina los
+   archivos temporales y retira la credencial temporal del gestor al terminar.
+
 ## Despliegue HTTPS
 
 En un servidor Linux con Docker Engine y Compose 2.24 o posterior, usa un
@@ -615,10 +645,11 @@ console.log((await fetch(comidaAjena, {
 ```
 
 Haz el recorrido a 320 píxeles CSS y en una pantalla ancha. Usa Tab, Mayús+Tab
-y Escape para comprobar el foco de los diálogos. En un dispositivo o emulador
+y Escape para comprobar el foco de los diálogos. En el navegador móvil, abre
+el dominio público para la prueba de publicación. Para la prueba local en
 Android, conecta el dispositivo mediante ADB o inicia el emulador. Ejecuta
-`adb reverse tcp:3000 tcp:3000` en el equipo donde corre Next.js. Abre
-`http://localhost:3000/login` en Chrome para Android y repite el recorrido con tacto.
+`adb reverse tcp:3000 tcp:3000` en el equipo donde corre Next.js y abre
+`http://localhost:3000/login` en Chrome para Android. Repite el recorrido con tacto.
 El diario usa Web Locks para coordinar los cambios de sesión entre pestañas.
 Usa HTTPS al acceder desde otro equipo y localhost para el desarrollo local.
 Si otra pestaña intenta iniciar sesión, el diario se oculta hasta comprobar la
